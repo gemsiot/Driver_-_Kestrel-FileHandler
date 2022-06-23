@@ -1,6 +1,0 @@
-[submodule "src/MB85RC256V-FRAM-RK"]
-	path = src/MB85RC256V-FRAM-RK
-	url = https://github.com/rickkas7/MB85RC256V-FRAM-RK.git
-[submodule "src/SdFat-Particle"]
-	path = src/SdFat-Particle
-	url = https://github.com/greiman/SdFat-Particle.git
