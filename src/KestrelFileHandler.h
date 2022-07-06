@@ -85,14 +85,16 @@ class KestrelFileHandler {
         // String metadataFilePath = ""; ///<Path describing the location of the metadata file on the SD card, updated each time `begin()` is run
         // String errorFilePath = ""; ///<Path describing the location of the error file on the SD card, updated each time `begin()` is run
         // String diagnosticFilePath = ""; ///<Path describing the location of the diagnostic file on the SD card, updated each time `begin()` is run
-        String filePaths[4] = {""}; ///<Paths for the location of the data files on the SD card (indicies mapped to DataType)
-        const String fileShortNames[4] = {"Log","Err","Diag","Meta"};
-        String publishTypes[4] = {"data","error","diagnostic","metadata"}; ///<Defines the values sent for particle publish names
+        String filePaths[5] = {""}; ///<Paths for the location of the data files on the SD card (indicies mapped to DataType)
+        const String fileShortNames[5] = {"Data","Err","Diag","Meta","Dump"};
+        String publishTypes[5] = {"data","error","diagnostic","metadata","unsent"}; ///<Defines the values sent for particle publish names
         static constexpr int MAX_MESSAGE_LENGTH = 1024; ///<Maximum number of characters allowed for single transmission 
         //FIX! Call from particle!
         const uint16_t maxFileNum = 9999; //Max number of files allowed 
         uint32_t memSizeFRAM = 65536; ///<Default to 65536 words which corresponds to 512kB memory 
         uint8_t adrLenFRAM = 2; ///<Default to using 2 bytes to encode address pointers, corresponds to 512kB memory
+        const uint32_t blockOffset = 1102; //FIX! Make variable
+        const uint32_t dataBlockEnd = 0; ///<End of the data region of the FRAM (growing toawrd 0)
         SdFat sd;
         File sdFile;
         MB85RC256V fram;
@@ -102,6 +104,8 @@ class KestrelFileHandler {
         static KestrelFileHandler* selfPointer;
         static void dateTimeSD(uint16_t* date, uint16_t* time);
         void dateTimeSD_Glob(uint16_t* date, uint16_t* time);
+        bool dumpToSD();
+        bool backhaulUnsentLogs();
         const uint8_t chipSelect = SS;
 
 
