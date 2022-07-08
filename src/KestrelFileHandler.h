@@ -7,9 +7,13 @@
 #include <Kestrel.h>
 
 namespace DestCodes{
-    constexpr uint8_t SD = 1;
-    constexpr uint8_t Particle = 2;
-    constexpr uint8_t Both = 3; 
+    constexpr uint8_t None = 0x00;
+    constexpr uint8_t SD = 0x01;
+    constexpr uint8_t Particle = 0x02;
+    constexpr uint8_t Both = 0x03; 
+    constexpr uint8_t SDRetry = 0x81;
+    constexpr uint8_t ParticleRetry = 0x82;
+    constexpr uint8_t BothRetry = 0x83;
 };
 
 namespace DataType{

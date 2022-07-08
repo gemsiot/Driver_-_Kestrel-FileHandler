@@ -21,14 +21,15 @@ String KestrelFileHandler::begin()
     uint32_t currentPointer;
     fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer);
     if(currentPointer > memSizeFRAM) {
-        Serial.println("FRAM Pointer Overrun Reset"); //DEBUG!
+        Serial.println("ERROR: FRAM Pointer Overrun Reset"); //DEBUG!
         fram.put(memSizeFRAM - sizeof(memSizeFRAM), memSizeFRAM); //Write default value in if not initialized already
         fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
-        Serial.print("New PointerA: "); //DEBUG!
-        Serial.println(currentPointer); //DEBUG!
+        // Serial.print("New PointerA: "); //DEBUG!
+        // Serial.println(currentPointer); //DEBUG!
     }
     if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) {
         sd.initErrorHalt();
+        //Throw Error!
     }
     sd.mkdir("GEMS");
     sd.chdir("/GEMS"); //Move into GEMS directory
@@ -37,11 +38,14 @@ String KestrelFileHandler::begin()
     //     Serial.println("SD Dir not present");
     // }
     sd.mkdir(String(Particle.deviceID())); //Make directory from device ID if does not already exist
-    sd.chdir(String(Particle.deviceID()), false); 
+    sd.chdir(String(Particle.deviceID()), false); //DEBUG! Restore
+    for(int i = 0; i < 5; i++) {
+        sd.mkdir(publishTypes[i]); //Make sub folders for each data type
+    }
+    sd.chdir(); //DEBUG! Go to root
     //FIX! Add year beakdown??
     // for(int i = 0; i < sizeof(publishTypes); i++) { //FIX! Causes assertion failure, not sure why??
     for(int i = 0; i < 4; i++) { //DEBUG!
-        sd.mkdir(publishTypes[i]); //Make sub folders for each data type
         filePaths[i] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[i]; //Create each file path base 
         uint16_t testFileIndex = 1; 
         String testFile = filePaths[i] + "/" + fileShortNames[i] + String(testFileIndex) + ".json";
@@ -51,22 +55,26 @@ String KestrelFileHandler::begin()
         }
         if(testFileIndex == maxFileNum) {
             //FIX! Throw error
-            Serial.println("SD Max File Num Exceeded");
+            Serial.println("ERROR: SD Max File Num Exceeded");
         }
         else {
             filePaths[i] = testFile; //Copy back test file to main file name source
         }
+        Serial.println(filePaths[i]); //DEBUG! Print out SD file paths
     }
-
-    sd.mkdir(publishTypes[4]); //Make sub folder for unsent logs
-    filePaths[4] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + fileShortNames[4] + ".txt"; //Create base file path for unsent logs, use normal text file 
+    // sd.chdir(String(Particle.deviceID()), false); //Move to device ID folder in order to make dump folder at right level
+    
+    filePaths[4] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + "/" + fileShortNames[4] + ".txt"; //Create base file path for unsent logs, use normal text file 
+    // filePaths[4] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + fileShortNames[4] + ".txt"; //DEBUG!
+    Serial.println(filePaths[4]); //DEBUG! Print out Backhaul file path
+    // sd.chdir("/"); //Move back to root
     if(sd.exists(filePaths[4])) { //Check if there exits a unsent log already, if so try to backhaul this
         //FIX! Throw error
         backhaulUnsentLogs(); 
     }
     fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
-    Serial.print("New PointerB: "); //DEBUG!
-    Serial.println(currentPointer); //DEBUG!
+    // Serial.print("New PointerB: "); //DEBUG!
+    // Serial.println(currentPointer); //DEBUG!
     return ""; //DEBUG!
 }
 
@@ -161,9 +169,9 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
 
     uint32_t stackPointer;
     fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
-    Serial.print("New PointerD: "); //DEBUG!
-    Serial.println(stackPointer); //DEBUG!
-    if((stackPointer - blockOffset) < dataBlockEnd) { //Check if overfun will occour, if so, dump the FRAM
+    // Serial.print("New PointerD: "); //DEBUG!
+    // Serial.println(stackPointer); //DEBUG!
+    if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
         if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
     }
@@ -175,6 +183,8 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     strcpy(temp.dest, destStr.c_str());
     strcpy(temp.data, dataStr.c_str());
     fram.put(stackPointer, temp); //Place object
+    Serial.print("WRITE STACK POINTER: "); //DEBUG!
+    Serial.println(stackPointer);
     fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
 
     return false; //DEBUG!
@@ -192,9 +202,9 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
     uint32_t stackPointer;
     // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
     // fram.get(memSizeFRAM - 4, stackPointer); //Grab current value of stack pointer //DEBUG! Duplicate to try to fix no read problem, DUMB!
-    fram.get(memSizeFRAM - 4, stackPointer); //Grab current value of stack pointer 
-    Serial.print("New PointerC: "); //DEBUG!
-    Serial.println(stackPointer); //DEBUG!
+    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer 
+    // Serial.print("New PointerC: "); //DEBUG!
+    // Serial.println(stackPointer); //DEBUG!
     if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
         if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
@@ -282,11 +292,26 @@ bool KestrelFileHandler::dumpFRAM()
         sd.initErrorHalt(); //DEBUG!??
     }
     // Serial.println("BACKHAUL"); //DEBUG!
-    bool sent = true; //Begin as true, clear if any Particle sends fail
+    bool sentLocal = false; //Keep track if local storage was success
+    bool sentRemote = false; //Keep track is remote sent was success 
+    bool sent = true; //Start as true and clear if any sends fail
+    
     while(stackPointer < memSizeFRAM) {
         // bool sentTemp = false;
         dataFRAM temp;
         fram.get(stackPointer, temp);
+        if(temp.destCode == DestCodes::Both) {
+            sentLocal = false; //Default both to false
+            sentRemote = false; 
+        }
+        if(temp.destCode == DestCodes::SD) {
+            sentLocal = false;
+            sentRemote = true;
+        }
+        if(temp.destCode == DestCodes::Particle) {
+            sentLocal = true;
+            sentRemote = false;
+        }
         // Serial.print("DEST: ");
         // Serial.print(temp.destCode);
         // Serial.print("\tDEST LEN: ");
@@ -330,7 +355,7 @@ bool KestrelFileHandler::dumpFRAM()
             if (!sdFile.open(fileName, O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
                 sd.errorHalt("opening test.txt for write failed");
                 sdFile.close();
-                sent = false; //Clear global flag
+                sentLocal = false; //Clear global flag
                 // sentTemp = false; //Clear flag on fail
                 // return false; //Return fail if not able to write
                 //FIX! ThrowError!
@@ -338,6 +363,7 @@ bool KestrelFileHandler::dumpFRAM()
             else {
                 sdFile.write(temp.data, temp.dataLen); //Append data to end
                 sdFile.write('\n'); //Place newline at end of each entry
+                sentLocal = true;
             }
             sdFile.close(); //Regardless of access, close file when done     
         }
@@ -346,7 +372,7 @@ bool KestrelFileHandler::dumpFRAM()
                 //FIX! Throw error
                 // return false; //If not connected to the cloud already, throw error and exit with fault
                 Serial.println("ERROR: Particle Disconnected"); //DEBUG!
-                sent = false; //DEBUG!
+                sentRemote = false; //DEBUG!
             }
             else {
                 // Serial.print("PARTICLE PUBLISH: ");
@@ -358,7 +384,7 @@ bool KestrelFileHandler::dumpFRAM()
                     delay(1000 - (millis() - lastPublish)); //Wait for the remainder of 1 second in order to space out publish events
                 }
                 // else {
-                sent = sent & Particle.publish((const char*)temp.dest, (const char*)temp.data, WITH_ACK);
+                sentRemote = Particle.publish((const char*)temp.dest, (const char*)temp.data, WITH_ACK);
                 // }
                 lastPublish = millis();
                 // Serial.println(sent);
@@ -366,14 +392,50 @@ bool KestrelFileHandler::dumpFRAM()
             }
             
         }
-        if(sent == true) { //Only increment pointer if 
-            // stackPointer += temp.dataLen + temp.destLen + 5; //Increment length of packet
-            stackPointer += blockOffset;
-            fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
-            // Serial.print("STACKPOINTER-READ+: ");
-            // Serial.println(stackPointer);
+        
+        
+        // if(sent == true) { //Only increment pointer if 
+        //     // stackPointer += temp.dataLen + temp.destLen + 5; //Increment length of packet
+        //     stackPointer += blockOffset;
+        //     fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+        //     // Serial.print("STACKPOINTER-READ+: ");
+        //     // Serial.println(stackPointer);
+        // }
+        // else return false; //If any send fails, just break out
+        
+
+        if(sentLocal == false && sentRemote == false) { //Whichever method was intended, it failed. Just write it back on the stack
+            //Throw error - critical!
+            // writeToFRAM(String(temp.data), String(temp.dest), temp.destCode);
+            sent = false;
         }
-        else return false; //If any send fails, just break out
+        else if(sentLocal == false && sentRemote == true) { //Failed to write to SD card, but either did not try to write to cell or succeded
+            // if(temp.destCode == DestCodes::SD) writeToFRAM(String(temp.data), String(temp.dest), DestCodes::Both); //If we just tried to write to SD and it failed, lets try to write to both to see if we can get the data back at all
+            // if(temp.destCode == DestCodes::Both) writeToFRAM(String(temp.data), String(temp.dest), DestCodes::SD); //If we failed to write to the SD, but tried both, just write back to the SD
+            if(temp.destCode == DestCodes::SD) fram.writeData(stackPointer, (const uint8_t *)&DestCodes::BothRetry, sizeof(DestCodes::BothRetry)); //If we just tried to write to SD and it failed, lets try to write to both to see if we can get the data back at all
+            if(temp.destCode == DestCodes::Both) fram.writeData(stackPointer, (const uint8_t *)&DestCodes::SDRetry, sizeof(DestCodes::SDRetry)); //If we failed to write to the SD, but tried both, just write back to the SD
+            sent = false;
+        }
+        else if(sentLocal == true && sentRemote == false) { //Failed to write to cell, but either did not try to write to SD or succeded
+            if(temp.destCode == DestCodes::Particle) fram.writeData(stackPointer, (const uint8_t *)&DestCodes::BothRetry, sizeof(DestCodes::BothRetry)); //If we just tried to write to cell and it failed, lets try to write to both to see if we can get the data back at all
+            if(temp.destCode == DestCodes::Both) {
+                Serial.print("Cell Backhaul: "); //DEBUG!
+                Serial.println(String(temp.data)); //DEBUG!
+                // writeToFRAM(String(temp.data), String(temp.dest), DestCodes::Particle); //If we failed to write to the cell, but tried both, just write back to the cell
+                // fram.put(stackPointer, DestCodes::Particle);
+                fram.writeData(stackPointer, (const uint8_t *)&DestCodes::ParticleRetry, sizeof(DestCodes::ParticleRetry));
+            }
+            sent = false;
+        }
+        else if(sentLocal == true && sentRemote == true)  { //If THIS write is good, nullify the destination, regardless of state of previous writes
+            // fram.put(stackPointer, DestCodes::None);
+            fram.writeData(stackPointer, (const uint8_t *)&DestCodes::None, sizeof(DestCodes::None));
+        }
+        stackPointer += blockOffset; //Increment local pointer
+        if(sentLocal == true && sentRemote == true && sent == true) { //If good write (and have been no failures) pop entry from stack
+            fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+        }
+        
         // sent = sent & sentTemp; //Update pervasive sent 
     }
 
@@ -387,7 +449,7 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
     Serial.println("DUMP FRAM TO SD");
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     uint32_t stackPointer;
-    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Get updated stack pointer at end of FRAM
     Serial.print("STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     // Serial.print("STACKPOINTER-READ: ");
@@ -460,12 +522,14 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
             //FIX! ThrowError!
         }
         else {
-            sdFile.print(temp.destCode); //Print destination code
-            sdFile.write('\t'); //Tab deliniate data
-            sdFile.write(temp.dest, temp.destLen); //Write out destination 
-            sdFile.print('\t'); //Tab deliniate data
-            sdFile.write(temp.data, temp.dataLen); //Write out data
-            sdFile.write('\n'); //Place newline at end of each entry
+            // if(temp.destCode != DestCodes::None) { //If entry has not already been backhauled //DEBUG!!!!
+                sdFile.print(temp.destCode); //Print destination code
+                sdFile.write('\t'); //Tab deliniate data
+                sdFile.write(temp.dest, temp.destLen); //Write out destination 
+                sdFile.print('\t'); //Tab deliniate data
+                sdFile.write(temp.data, temp.dataLen); //Write out data
+                sdFile.write('\n'); //Place newline at end of each entry
+            // }
         }
         sdFile.close(); //Regardless of access, close file when done     
         
@@ -500,20 +564,23 @@ void KestrelFileHandler::dateTimeSD(uint16_t* date, uint16_t* time) {
 //  Serial.println("yy");
 //  Serial.println(timestamp);
 
-selfPointer->logger.updateTime();
-Serial.print("SD Date: "); //DEBUG!
-Serial.print(selfPointer->logger.currentDateTime.year);
-Serial.print("/");
-Serial.print(selfPointer->logger.currentDateTime.month);
-Serial.print("/");
-Serial.print(selfPointer->logger.currentDateTime.day);
-Serial.print(" - ");
-Serial.println(selfPointer->logger.currentDateTime.source);
- // return date using FAT_DATE macro to format fields
- *date = FAT_DATE(selfPointer->logger.currentDateTime.year, selfPointer->logger.currentDateTime.month, selfPointer->logger.currentDateTime.day);
+uint8_t source = selfPointer->logger.updateTime();
+if(source > TimeSource::NONE) { //Only write time back if time is legit
+    Serial.print("SD Date: "); //DEBUG!
+    Serial.print(selfPointer->logger.currentDateTime.year);
+    Serial.print("/");
+    Serial.print(selfPointer->logger.currentDateTime.month);
+    Serial.print("/");
+    Serial.print(selfPointer->logger.currentDateTime.day);
+    Serial.print(" - ");
+    Serial.println(selfPointer->logger.currentDateTime.source);
+    // return date using FAT_DATE macro to format fields
+    *date = FAT_DATE(selfPointer->logger.currentDateTime.year, selfPointer->logger.currentDateTime.month, selfPointer->logger.currentDateTime.day);
 
- // return time using FAT_TIME macro to format fields
- *time = FAT_TIME(selfPointer->logger.currentDateTime.hour, selfPointer->logger.currentDateTime.minute, selfPointer->logger.currentDateTime.second);
+    // return time using FAT_TIME macro to format fields
+    *time = FAT_TIME(selfPointer->logger.currentDateTime.hour, selfPointer->logger.currentDateTime.minute, selfPointer->logger.currentDateTime.second);
+}
+
 }
 
 void KestrelFileHandler::dateTimeSD_Glob(uint16_t* date, uint16_t* time) {selfPointer->dateTimeSD(date, time);}
