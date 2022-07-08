@@ -89,7 +89,7 @@ class KestrelFileHandler {
         // String metadataFilePath = ""; ///<Path describing the location of the metadata file on the SD card, updated each time `begin()` is run
         // String errorFilePath = ""; ///<Path describing the location of the error file on the SD card, updated each time `begin()` is run
         // String diagnosticFilePath = ""; ///<Path describing the location of the diagnostic file on the SD card, updated each time `begin()` is run
-        String filePaths[5] = {""}; ///<Paths for the location of the data files on the SD card (indicies mapped to DataType)
+        String filePaths[6] = {""}; ///<Paths for the location of the data files on the SD card (indicies mapped to DataType)
         const String fileShortNames[5] = {"Data","Err","Diag","Meta","Dump"};
         String publishTypes[5] = {"data","error","diagnostic","metadata","unsent"}; ///<Defines the values sent for particle publish names
         static constexpr int MAX_MESSAGE_LENGTH = 1024; ///<Maximum number of characters allowed for single transmission 
