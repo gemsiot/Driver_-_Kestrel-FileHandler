@@ -738,6 +738,10 @@ bool KestrelFileHandler::backhaulUnsentLogs()
     return true; //DEBUG!
 }
 
+bool KestrelFileHandler::eraseFRAM()
+{
+    return fram.erase();
+}
 
 String KestrelFileHandler::selfDiagnostic(uint8_t level)
 {

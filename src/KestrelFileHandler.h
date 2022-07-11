@@ -83,7 +83,8 @@ class KestrelFileHandler {
         * @details Self diagnostic result is returned as a JSON formatted string from the function  
         */  
        String selfDiagnostic(uint8_t level);
-    
+        bool eraseFRAM();
+        
     private:
         // String dataFilePath = ""; ///<Path describing the location of the data file on the SD card, updated each time `begin()` is run
         // String metadataFilePath = ""; ///<Path describing the location of the metadata file on the SD card, updated each time `begin()` is run
