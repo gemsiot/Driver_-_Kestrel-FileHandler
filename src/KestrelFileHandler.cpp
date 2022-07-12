@@ -99,6 +99,7 @@ bool KestrelFileHandler::writeToSD(String data, String path)
         sdFile.println(data); //Append data to end
     }
     sdFile.close(); //Regardless of access, close file when done 
+    // delay(10);
     logger.enableSD(false); //Turn SD back off
     return true; //If get to this point, should have been success
     //FIX! Read back??
@@ -279,6 +280,7 @@ bool KestrelFileHandler::dumpFRAM()
 {
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
+    logger.enableSD(true);
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     uint32_t stackPointer;
     fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
@@ -293,8 +295,19 @@ bool KestrelFileHandler::dumpFRAM()
     // uint16_t dataLen = 0;
     // uint8_t data[1024] = {0};
     logger.enableSD(true);
+    logger.statLED(true); //Indicate backhaul in progress
     if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
-        sd.initErrorHalt(); //DEBUG!??
+        logger.enableSD(false);
+        delay(100);
+        logger.enableSD(true);
+        if(!sd.begin(chipSelect, SPI_FULL_SPEED)) {
+            Serial.println("SD Fail on retry"); //DEBUG!
+            sd.initErrorHalt(); //DEBUG!??
+        }
+        else {
+            //THROW ERROR - device needed to restart SD to get it to work
+        }
+        
     }
     // Serial.println("BACKHAUL"); //DEBUG!
     bool sentLocal = false; //Keep track if local storage was success
@@ -443,6 +456,7 @@ bool KestrelFileHandler::dumpFRAM()
         
         // sent = sent & sentTemp; //Update pervasive sent 
     }
+    logger.statLED(false); 
     logger.enableSD(false); //Turn SD back off
     return sent; //DEBUG!
 }
@@ -451,6 +465,7 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
 {
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
+    logger.enableSD(true);
     Serial.println("DUMP FRAM TO SD");
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     uint32_t stackPointer;
@@ -465,11 +480,22 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
     // uint8_t dest[64] = {0};
     // uint16_t dataLen = 0;
     // uint8_t data[1024] = {0};
-    logger.enableSD(true);
+    // logger.enableSD(true);
+    logger.statLED(true); //Indicate backhaul in progress
     if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
         //FIX! Throw error!
         //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
-        sd.initErrorHalt(); //DEBUG!??
+        logger.enableSD(false);
+        delay(100);
+        logger.enableSD(true);
+        if(!sd.begin(chipSelect, SPI_FULL_SPEED)) {
+            Serial.println("SD Fail on retry"); //DEBUG!
+            sd.initErrorHalt(); //DEBUG!??
+        }
+        else {
+            //THROW ERROR - device needed to restart SD to get it to work
+        }
+        // sd.initErrorHalt(); //DEBUG!??
 
     }
     // Serial.println("BACKHAUL"); //DEBUG!
@@ -536,8 +562,8 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
                 sdFile.write('\n'); //Place newline at end of each entry
             // }
         }
-        sdFile.close(); //Regardless of access, close file when done     
-        logger.enableSD(false); //Turn SD back off
+        sdFile.close(); //Regardless of access, close file when done
+        
         if(sent == true) { //Only increment pointer if 
             // stackPointer += temp.dataLen + temp.destLen + 5; //Increment length of packet
             stackPointer += blockOffset;
@@ -548,7 +574,9 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
         else return false; //If any send fails, just break out //FIX! Throw error
         // sent = sent & sentTemp; //Update pervasive sent 
     }
-
+    // delay(10);     
+    logger.enableSD(false); //Turn SD back off
+    logger.statLED(false);
     return sent; //DEBUG!
 }
 
@@ -559,7 +587,7 @@ bool KestrelFileHandler::backhaulUnsentLogs()
         //FIX! Throw error!
         //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
         sd.initErrorHalt(); //DEBUG!??
-
+        return 0;
     }
     // Serial.println("BACKHAUL"); //DEBUG!
     bool sent = true; //Begin as true, clear if any Particle sends fail
@@ -572,6 +600,10 @@ bool KestrelFileHandler::backhaulUnsentLogs()
     // strcpy(temp.data, dataStr.c_str());
     File tempFile;
     File normalLogFile;
+    logger.statLED(true); //Indicate backhaul in progress
+    if(sd.exists(filePaths[5])) { //If a temp file already exists, throw error since last unsent backhaul did not exit correctly 
+        //THROW ERROR! 
+    }
     if (!sdFile.open(filePaths[4], O_RDONLY) || !tempFile.open(filePaths[5], O_RDWR | O_CREAT | O_AT_END)) { //Open existing file as read only (then delete at the end), open temp file normally 
             sd.errorHalt("opening backhaul file or temp file failed"); //DEBUG!
             sdFile.close();
@@ -734,6 +766,8 @@ bool KestrelFileHandler::backhaulUnsentLogs()
         sd.rename(filePaths[5], filePaths[4]); //Rename temp file to unsent file
         sd.remove(filePaths[5]); //Delete temp file
     }
+    logger.statLED(false); 
+    // delay(10);
     logger.enableSD(false); //Power SD back off
     return true; //DEBUG!
 }
