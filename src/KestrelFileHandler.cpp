@@ -9,7 +9,7 @@ KestrelFileHandler::KestrelFileHandler(Kestrel& logger_) : logger(logger_), fram
     // logger = logger_;
 }
 
-String KestrelFileHandler::begin()
+String KestrelFileHandler::begin(bool tryBackhaul)
 {
     selfPointer = this;
     SdFile::dateTimeCallback(dateTimeSD);
@@ -70,7 +70,7 @@ String KestrelFileHandler::begin()
     Serial.println(filePaths[4]); //DEBUG! Print out Backhaul file path
     // sd.chdir("/"); //Move back to root
     sd.ls(); //DEBUG!
-    if(sd.exists(filePaths[4])) { //Check if there exits a unsent log already, if so try to backhaul this
+    if(sd.exists(filePaths[4]) && tryBackhaul) { //Check if there exits a unsent log already (and we ask it to try), if so try to backhaul this
         //FIX! Throw error
         Serial.println("Backhaul Unsent Logs"); //DEBUG!
         backhaulUnsentLogs(); 
@@ -780,6 +780,21 @@ bool KestrelFileHandler::eraseFRAM()
 String KestrelFileHandler::selfDiagnostic(uint8_t level)
 {
     return ""; //DEBUG!
+}
+
+bool KestrelFileHandler::tryBackhaul()
+{
+    if(Particle.connected()) {
+        logger.enableSD(true); //Turn SD power on if not already
+        if(sd.exists(filePaths[4])) { //Check if there exits a unsent log already, if so try to backhaul this
+            //FIX! Throw error
+            // Serial.println("Backhaul Unsent Logs"); //DEBUG!
+            return backhaulUnsentLogs(); //Return pass/fail value from backhaul
+        }
+        return true; //This is a "pass" since we are connected to cell and can read from SD, but there are no files to backhaul
+    }
+    return false; //If not connected to cell 
+    
 }
 
 void KestrelFileHandler::dateTimeSD(uint16_t* date, uint16_t* time) {

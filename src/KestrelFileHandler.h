@@ -40,8 +40,10 @@ class KestrelFileHandler {
         KestrelFileHandler(Kestrel& logger_); //FIX! Should we pass in the max length of packets??
         /**
         * @brief Initialize the system and generate new file paths for each type on the SD card
+        * * @param tryBackhaul defaults to true, specifies if the initalization should try to backhaul the unsent logs
+        * @return lvl 2 diagnostic 
         */    
-        String begin();
+        String begin(bool tryBackhaul = true);
         /**
         * @brief Write the given data string to SD card
         * * @param[in] data: String of data to be written to SD card
@@ -83,6 +85,16 @@ class KestrelFileHandler {
         * @details Self diagnostic result is returned as a JSON formatted string from the function  
         */  
        String selfDiagnostic(uint8_t level);
+       /**
+        * @brief Attempts to backhaul old logs 
+        * @details Tries to backhaul unsent logs if there is a network connection
+        * @return bool, success or failure of backhaul
+        */  
+       bool tryBackhaul();
+       /**
+        * @brief Erases FRAM data
+        * @details Simply calls the erase command, allows system to start from clean slate
+        */  
         bool eraseFRAM();
         
     private:
