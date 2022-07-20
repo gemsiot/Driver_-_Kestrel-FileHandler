@@ -45,15 +45,20 @@ String KestrelFileHandler::begin(bool tryBackhaul)
     sd.chdir(); //DEBUG! Go to root
     //FIX! Add year beakdown??
     // for(int i = 0; i < sizeof(publishTypes); i++) { //FIX! Causes assertion failure, not sure why??
+    retained static uint16_t fileIndex[4] = {1};
     for(int i = 0; i < 4; i++) { //DEBUG!
         filePaths[i] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[i]; //Create each file path base 
-        uint16_t testFileIndex = 1; 
-        String testFile = filePaths[i] + "/" + fileShortNames[i] + String(testFileIndex) + ".json";
-        while(sd.exists(testFile) && testFileIndex < maxFileNum) {
-            testFileIndex += 1; //Increment file index and try again
-            testFile = filePaths[i] + "/" + fileShortNames[i] + String(testFileIndex) + ".json";
+        // uint16_t testFileIndex = 1; 
+        String testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json";
+        while(sd.exists(testFile) && fileIndex[i] < maxFileNum) {
+            fileIndex[i] += 1; //Increment file index and try again
+            testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json";
+            Serial.print(fileShortNames[i]); //DEBUG! 
+            Serial.print(String(fileIndex[i]));
+            Serial.print("\t");
+            Serial.println(System.freeMemory());
         }
-        if(testFileIndex == maxFileNum) {
+        if(fileIndex[i] == maxFileNum) {
             //FIX! Throw error
             Serial.println("ERROR: SD Max File Num Exceeded");
         }
@@ -144,6 +149,9 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
     
+    Serial.println("PARSE STRING"); //DEBUG!
+    Serial.println(dataStr.indexOf('\n'));
+    Serial.println(dataStr.length());
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     if(dataStr.length() > MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) {
         //FIX! Throw error
@@ -158,6 +166,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
         //CONTINUE??
     }
     else if(dataStr.indexOf('\n') > 0) { //If there are line breaks, seperate them, regardless of total length
+        
         if(dataStr.charAt(dataStr.length() - 1) == '\n') dataStr.remove(dataStr.length() - 1); //If string is terminated with newline, remove this
         String temp = ""; //Make temp string to hold substrings 
         bool sent = true; //Keep track if any of the send attempts fail
@@ -165,11 +174,11 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
             temp = dataStr.substring(dataStr.lastIndexOf('\n')); 
             //FIX! test if this substring is still too long because of bad parsing before, if so, throw error
             // sent = sent & Particle.publish(destStr, temp, WITH_ACK); //If any of the sends fail, sent will be cleared
-            sent = sent & writeToFRAM(destStr, temp, destination); //Pass the line off for recursive processing 
+            sent = sent & writeToFRAM(temp, destStr, destination); //Pass the line off for recursive processing 
             dataStr.remove(dataStr.lastIndexOf('\n')); //Clear end substring from data, including newline return 
         }
         // sent = sent & Particle.publish(destStr, dataStr, WITH_ACK); //Send last string
-        sent = sent & writeToFRAM(destStr, temp, destination); //Pass last line off for recursive processing
+        sent = sent & writeToFRAM(temp, destStr, destination); //Pass last line off for recursive processing
         // return sent; //Return the cumulative result
     }
 
@@ -178,6 +187,8 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     // Serial.print("New PointerD: "); //DEBUG!
     // Serial.println(stackPointer); //DEBUG!
     if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
+        Serial.print("BAD POINTER: "); //DEBUG!
+        Serial.println(stackPointer);
         if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
     }
@@ -201,10 +212,42 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
     
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
+    Serial.println("PARSE STRING"); //DEBUG!
+    Serial.println(dataStr.indexOf('\n'));
+    Serial.println(dataStr.length());
     // Wire.reset(); //DEBUG!
     // delay(10); //DEBUG!
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     String destStr = publishTypes[dataType]; //Intelegently assign destination string
+    if(dataStr.length() > MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) {
+        //FIX! Throw error
+        return false; //If string is longer than can be transmitted in one packet, AND there are not line breaks to work with, throw error and exit
+    }
+    else if(dataStr.length() < MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) { //If less than max length and no line breaks, perform simple transmit
+        // bool sent = Particle.publish(destStr, dataStr, WITH_ACK);
+        // if(!sent) {
+        //     //FIX! Throw error if send did not work
+        // }
+        // return sent; //Return the pass fail result after attempting a transmission with acknowledge 
+        //CONTINUE??
+    }
+    else if(dataStr.indexOf('\n') > 0) { //If there are line breaks, seperate them, regardless of total length
+        
+        if(dataStr.charAt(dataStr.length() - 1) == '\n') dataStr.remove(dataStr.length() - 1); //If string is terminated with newline, remove this
+        String temp = ""; //Make temp string to hold substrings 
+        bool sent = true; //Keep track if any of the send attempts fail
+        while(dataStr.indexOf('\n') > 0) {
+            temp = dataStr.substring(dataStr.lastIndexOf('\n')); 
+            //FIX! test if this substring is still too long because of bad parsing before, if so, throw error
+            // sent = sent & Particle.publish(destStr, temp, WITH_ACK); //If any of the sends fail, sent will be cleared
+            sent = sent & writeToFRAM(temp, destStr, destination); //Pass the line off for recursive processing 
+            dataStr.remove(dataStr.lastIndexOf('\n')); //Clear end substring from data, including newline return 
+        }
+        // sent = sent & Particle.publish(destStr, dataStr, WITH_ACK); //Send last string
+        sent = sent & writeToFRAM(temp, destStr, destination); //Pass last line off for recursive processing
+        // return sent; //Return the cumulative result
+    }
+    
     uint32_t stackPointer;
     // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
     // fram.get(memSizeFRAM - 4, stackPointer); //Grab current value of stack pointer //DEBUG! Duplicate to try to fix no read problem, DUMB!
@@ -212,6 +255,8 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
     // Serial.print("New PointerC: "); //DEBUG!
     // Serial.println(stackPointer); //DEBUG!
     if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
+        Serial.print("BAD POINTER: "); //DEBUG!
+        Serial.println(stackPointer);
         if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
     }
@@ -360,9 +405,9 @@ bool KestrelFileHandler::dumpFRAM()
             String fileName = "";
             // for(int i = 0; i < sizeof(publishTypes); i++) {
             for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
-                // Serial.println("SD String Vals:"); //DEBUG!
-                // Serial.write((const uint8_t*)temp.dest, temp.destLen);
-                // Serial.print("\n");
+                Serial.println("SD String Vals:"); //DEBUG!
+                Serial.write((const uint8_t*)temp.dest, temp.destLen);
+                Serial.print("\n");
                 // Serial.println(publishTypes[i]);
                 if(strcmp(temp.dest, publishTypes[i].c_str()) == 0) {
                     fileName = filePaths[i]; //Once the destination is found, match it with the destination file
