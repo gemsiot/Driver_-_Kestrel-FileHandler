@@ -149,9 +149,9 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
     
-    Serial.println("PARSE STRING"); //DEBUG!
-    Serial.println(dataStr.indexOf('\n'));
-    Serial.println(dataStr.length());
+    // Serial.println("PARSE STRING"); //DEBUG!
+    // Serial.println(dataStr.indexOf('\n'));
+    // Serial.println(dataStr.length());
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     if(dataStr.length() > MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) {
         //FIX! Throw error
@@ -189,6 +189,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
         Serial.print("BAD POINTER: "); //DEBUG!
         Serial.println(stackPointer);
+        //THROW ERROR
         if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
     }
@@ -203,7 +204,9 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     Serial.print("WRITE STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
-
+    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
+    Serial.print("READBACK STACK POINTER: "); //DEBUG!
+    Serial.println(stackPointer);
     return false; //DEBUG!
 }
 
@@ -212,9 +215,9 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
     
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
-    Serial.println("PARSE STRING"); //DEBUG!
-    Serial.println(dataStr.indexOf('\n'));
-    Serial.println(dataStr.length());
+    // Serial.println("PARSE STRING"); //DEBUG!
+    // Serial.println(dataStr.indexOf('\n'));
+    // Serial.println(dataStr.length());
     // Wire.reset(); //DEBUG!
     // delay(10); //DEBUG!
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
@@ -257,6 +260,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
     if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
         Serial.print("BAD POINTER: "); //DEBUG!
         Serial.println(stackPointer);
+        //THROW ERROR
         if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
     }
@@ -271,6 +275,9 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
     Serial.print("WRITE STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
+    Serial.print("READBACK STACK POINTER: "); //DEBUG!
+    Serial.println(stackPointer);
     // Serial.println(String(temp.data)); //DEBUG!
     // Serial.print("STACKPOINTER-Write: ");
     // Serial.println(stackPointer);
@@ -405,9 +412,9 @@ bool KestrelFileHandler::dumpFRAM()
             String fileName = "";
             // for(int i = 0; i < sizeof(publishTypes); i++) {
             for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
-                Serial.println("SD String Vals:"); //DEBUG!
-                Serial.write((const uint8_t*)temp.dest, temp.destLen);
-                Serial.print("\n");
+                // Serial.println("SD String Vals:"); //DEBUG!
+                // Serial.write((const uint8_t*)temp.dest, temp.destLen);
+                // Serial.print("\n");
                 // Serial.println(publishTypes[i]);
                 if(strcmp(temp.dest, publishTypes[i].c_str()) == 0) {
                     fileName = filePaths[i]; //Once the destination is found, match it with the destination file
