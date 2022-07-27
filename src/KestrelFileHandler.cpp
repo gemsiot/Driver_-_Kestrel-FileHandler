@@ -22,7 +22,7 @@ String KestrelFileHandler::begin(bool tryBackhaul)
     // fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer);
     if(currentPointer > memSizeFRAM) {
         Serial.println("ERROR: FRAM Pointer Overrun Reset"); //DEBUG!
-        fram.put(memSizeFRAM - sizeof(memSizeFRAM), memSizeFRAM); //Write default value in if not initialized already
+        fram.put(memSizeFRAM - sizeof(memSizeFRAM), memSizeFRAM - sizeof(memSizeFRAM)); //Write default value in if not initialized already
         currentPointer = getStackPointer();
         // fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
         // Serial.print("New PointerA: "); //DEBUG!
