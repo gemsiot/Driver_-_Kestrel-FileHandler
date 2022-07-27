@@ -18,12 +18,13 @@ String KestrelFileHandler::begin(bool tryBackhaul)
 	logger.enableSD(true); //Turn on power to SD card
     // Serial.println("File Handler Init"); //DEBUG!
     // Serial.println(logger.updateTime()); //DEBUG!
-    uint32_t currentPointer;
-    fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer);
+    uint32_t currentPointer = getStackPointer();
+    // fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer);
     if(currentPointer > memSizeFRAM) {
         Serial.println("ERROR: FRAM Pointer Overrun Reset"); //DEBUG!
         fram.put(memSizeFRAM - sizeof(memSizeFRAM), memSizeFRAM); //Write default value in if not initialized already
-        fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
+        currentPointer = getStackPointer();
+        // fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
         // Serial.print("New PointerA: "); //DEBUG!
         // Serial.println(currentPointer); //DEBUG!
     }
@@ -81,7 +82,8 @@ String KestrelFileHandler::begin(bool tryBackhaul)
         backhaulUnsentLogs(); 
     }
     logger.enableSD(false); //Turn SD back off
-    fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
+    // fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
+    currentPointer = getStackPointer(); //DEBUG! Read back
     // Serial.print("New PointerB: "); //DEBUG!
     // Serial.println(currentPointer); //DEBUG!
     return ""; //DEBUG!
@@ -182,15 +184,28 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
         // return sent; //Return the cumulative result
     }
 
-    uint32_t stackPointer;
-    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
+    // Wire.beginTransmission(0x50); //DEBUG! Test for adr response of FRAM
+    // int error = Wire.endTransmission();
+    // Serial.print("FRAM ERROR: ");
+    // Serial.println(error);
+    uint32_t stackPointer = getStackPointer();
+    // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
+
+    Serial.print("READ STACK POINTER: "); //DEBUG!
+    Serial.println(stackPointer);
+    // if(stackPointer == 1152) { //DEBUG!!!
+    //     fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer 
+    //     Serial.print("REPEAT STACK POINTER: "); //DEBUG!
+    //     Serial.println(stackPointer);
+    // }
     // Serial.print("New PointerD: "); //DEBUG!
     // Serial.println(stackPointer); //DEBUG!
     if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
         Serial.print("BAD POINTER: "); //DEBUG!
         Serial.println(stackPointer);
         //THROW ERROR
-        if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
+        // if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
+        if(dumpToSD()) stackPointer = getStackPointer(); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
     }
     // uint32_t blockEnd = 0;
@@ -204,7 +219,8 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     Serial.print("WRITE STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
-    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
+    // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
+    stackPointer = getStackPointer(); //Grab current value of stack pointer
     Serial.print("READBACK STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     return false; //DEBUG!
@@ -251,17 +267,30 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
         // return sent; //Return the cumulative result
     }
     
-    uint32_t stackPointer;
+    uint32_t stackPointer = getStackPointer();
     // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
-    // fram.get(memSizeFRAM - 4, stackPointer); //Grab current value of stack pointer //DEBUG! Duplicate to try to fix no read problem, DUMB!
-    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer 
+    // fram.get(memSizeFRAM - 4, stackPointer); //Grab current value of stack pointer 
+    // Wire.beginTransmission(0x50); //DEBUG! Test for adr response of FRAM
+    // int error = Wire.endTransmission();
+    // Serial.print("FRAM ERROR: ");
+    // Serial.println(error);
+    // uint32_t stackPointer;
+    // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer 
+    Serial.print("READ STACK POINTER: "); //DEBUG!
+    Serial.println(stackPointer);
+    // if(stackPointer == 1152) { //DEBUG!!! //DEBUG! Duplicate to try to fix no read problem, DUMB!
+    //     fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer 
+    //     Serial.print("REPEAT STACK POINTER: "); //DEBUG!
+    //     Serial.println(stackPointer);
+    // }
     // Serial.print("New PointerC: "); //DEBUG!
     // Serial.println(stackPointer); //DEBUG!
     if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
         Serial.print("BAD POINTER: "); //DEBUG!
         Serial.println(stackPointer);
         //THROW ERROR
-        if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
+        // if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
+        if(dumpToSD()) stackPointer = getStackPointer(); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
     }
     // uint32_t blockEnd = 0;
@@ -275,7 +304,8 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
     Serial.print("WRITE STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
-    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
+    // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab current value of stack pointer
+    stackPointer = getStackPointer(); //Grab current value of stack pointer
     Serial.print("READBACK STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     // Serial.println(String(temp.data)); //DEBUG!
@@ -334,8 +364,8 @@ bool KestrelFileHandler::dumpFRAM()
     logger.enableI2C_OB(true); //Turn on internal I2C
     logger.enableSD(true);
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
-    uint32_t stackPointer;
-    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+    uint32_t stackPointer = getStackPointer(); //Grab stack pointer from end of FRAM
+    // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab stack pointer from end of FRAM
     Serial.print("STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     // Serial.print("STACKPOINTER-READ: ");
@@ -366,7 +396,7 @@ bool KestrelFileHandler::dumpFRAM()
     bool sentRemote = false; //Keep track is remote sent was success 
     bool sent = true; //Start as true and clear if any sends fail
     
-    while(stackPointer < memSizeFRAM) {
+    while(stackPointer + sizeof(stackPointer) < memSizeFRAM) {
         // bool sentTemp = false;
         dataFRAM temp;
         fram.get(stackPointer, temp);
@@ -503,6 +533,8 @@ bool KestrelFileHandler::dumpFRAM()
         }
         stackPointer += blockOffset; //Increment local pointer
         if(sentLocal == true && sentRemote == true && sent == true) { //If good write (and have been no failures) pop entry from stack
+            Serial.print("WRITE BACKHAUL POINTER: "); //DEBUG!
+            Serial.println(stackPointer);
             fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
         }
         
@@ -520,8 +552,8 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
     logger.enableSD(true);
     Serial.println("DUMP FRAM TO SD");
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
-    uint32_t stackPointer;
-    fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Get updated stack pointer at end of FRAM
+    uint32_t stackPointer = getStackPointer(); //Grab stack pointer from end of FRAM
+    // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Get updated stack pointer at end of FRAM
     Serial.print("STACK POINTER: "); //DEBUG!
     Serial.println(stackPointer);
     // Serial.print("STACKPOINTER-READ: ");
@@ -619,6 +651,8 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
         if(sent == true) { //Only increment pointer if 
             // stackPointer += temp.dataLen + temp.destLen + 5; //Increment length of packet
             stackPointer += blockOffset;
+            Serial.print("WRITE DUMP POINTER: "); //DEBUG!
+            Serial.println(stackPointer);
             fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
             // Serial.print("STACKPOINTER-READ+: ");
             // Serial.println(stackPointer);
@@ -827,6 +861,41 @@ bool KestrelFileHandler::backhaulUnsentLogs()
 bool KestrelFileHandler::eraseFRAM()
 {
     return fram.erase();
+}
+
+long KestrelFileHandler::getStackPointer()
+{
+    uint8_t count = 0; //Keep track of number of attemtps
+    const uint8_t maxAttempts = 3; //Max number of times to try to connect to device 
+    const unsigned long timeout = 10; //Wait for response from FRAM
+    int error = -1;
+    uint32_t stackPointer = 0;
+    uint8_t highByte = (((memSizeFRAM - 4) & 0xFF00) >> 8); //Generate high address
+    uint8_t lowByte = (memSizeFRAM - 4) & 0x00FF; //Generate low address
+    while(error != 0 && count < maxAttempts) {
+        Wire.beginTransmission(0x50);
+        Wire.write(highByte);
+        Wire.write(lowByte);
+        error = Wire.endTransmission();
+        if(error == 0) { //Only proceed if able to talk to FRAM 
+            Wire.requestFrom(0x50, 4);
+            unsigned long localTime = millis();
+            while(Wire.available() < 4 && (millis() - localTime) < timeout); //Wait until bytes ready or timeout
+            if(Wire.available() < 4) error = -1; //Force error if still have not gotten response
+            else {
+                for(int offset = 0; offset < (4*8); offset += 8) {
+                    stackPointer = stackPointer | (Wire.read() << offset); //Read in stackPointer value
+                }
+                break;
+            }
+            
+        }
+    }
+    if(error == 0) return stackPointer; //If no error, return the read value
+    else {
+        //THROW ERROR
+        return dataBlockEnd; //Otherwise set back to the begining of data block in case of an error //FIX! Best option??
+    }
 }
 
 String KestrelFileHandler::selfDiagnostic(uint8_t level)

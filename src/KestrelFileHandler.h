@@ -97,6 +97,7 @@ class KestrelFileHandler {
         */  
         bool eraseFRAM();
         
+        
     private:
         // String dataFilePath = ""; ///<Path describing the location of the data file on the SD card, updated each time `begin()` is run
         // String metadataFilePath = ""; ///<Path describing the location of the metadata file on the SD card, updated each time `begin()` is run
@@ -123,6 +124,7 @@ class KestrelFileHandler {
         void dateTimeSD_Glob(uint16_t* date, uint16_t* time);
         bool dumpToSD();
         bool backhaulUnsentLogs();
+        long getStackPointer();
         const uint8_t chipSelect = SS;
 
 
