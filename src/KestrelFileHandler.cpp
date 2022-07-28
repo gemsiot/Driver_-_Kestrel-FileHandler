@@ -180,7 +180,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
             dataStr.remove(dataStr.lastIndexOf('\n')); //Clear end substring from data, including newline return 
         }
         // sent = sent & Particle.publish(destStr, dataStr, WITH_ACK); //Send last string
-        sent = sent & writeToFRAM(temp, destStr, destination); //Pass last line off for recursive processing
+        // sent = sent & writeToFRAM(temp, destStr, destination); //Pass last line off for recursive processing
         // return sent; //Return the cumulative result
     }
 
@@ -263,7 +263,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
             dataStr.remove(dataStr.lastIndexOf('\n')); //Clear end substring from data, including newline return 
         }
         // sent = sent & Particle.publish(destStr, dataStr, WITH_ACK); //Send last string
-        sent = sent & writeToFRAM(temp, destStr, destination); //Pass last line off for recursive processing
+        // sent = sent & writeToFRAM(temp, destStr, destination); //Pass last line off for recursive processing
         // return sent; //Return the cumulative result
     }
     
