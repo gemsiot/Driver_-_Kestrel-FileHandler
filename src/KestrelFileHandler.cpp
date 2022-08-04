@@ -1081,7 +1081,8 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
         Serial.print("Num Files: "); //DEBUG!
         Serial.println(numFiles);
         for(int i = 0; i < numFiles; i++) { //FIX! Should check for sizeof(filePaths), but this causes a panic
-            output = output + "\"" + filePaths[i] + "\""; //Concatonate file strings
+            if(filePaths[i] == "") output = output  + "null"; //If file path is not established, return null
+            else output = output + "\"" + filePaths[i] + "\""; //Concatonate file strings if file names are good
             if(i < numFiles - 1) output = output + ","; //Add comma seperator if not last entry //FIX! should use sizeof(filePaths)
         }
         output = output + "]"; //Close array
