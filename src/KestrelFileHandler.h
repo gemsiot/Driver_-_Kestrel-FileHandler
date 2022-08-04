@@ -5,6 +5,7 @@
 #include <Particle.h>
 #include <MB85RC256V-FRAM-RK.h>
 #include <Kestrel.h>
+#include <Sensor.h>
 
 namespace DestCodes{
     constexpr uint8_t None = 0x00;
@@ -34,16 +35,42 @@ struct dataFRAM {
 
 
 
-class KestrelFileHandler {
+class KestrelFileHandler: public Sensor 
+{
+    const uint32_t SD_INIT_FAIL = 0x400100F4;
+    const uint32_t SD_ACCESS_FAIL = 0x400200F4;
+    const uint32_t SD_NOT_INSERTED = 0xE00100F4;
+    const uint32_t FILE_LIMIT_EXCEEDED = 0x800300F4;
+    const uint32_t FREE_SPACE_WARNING = 0xF00100F4;
+    const uint32_t FREE_SPACE_CRITICAL = 0xF00200F4;
+    const uint32_t EXPECTED_FILE_MISSING = 0xF00300F4;
+    const uint32_t BASE_FOLDER_MISSING = 0xF00400F4;
+    const uint32_t FRAM_INIT_FAIL = 0x400300F9;
+    const uint32_t FRAM_ACCESS_FAIL = 0x400400F9;
+    const uint32_t FRAM_OVERRUN = 0x400500F9;
+    const uint32_t FRAM_INDEX_EXCEEDED = 0x800400F4;
+    const uint32_t BACKLOG_PRESENT = 0xF00600F4;
+    const uint32_t PUBLISH_FAIL = 0x600100F6; ///<Connected, but fail to publish
+    const uint32_t FRAM_EXPELLED = 0xF00900F4; ///<FRAM overrun dumped via cell, SD may be inconsistent 
 
+
+    constexpr static  int MAX_NUM_ERRORS = 10; ///<Maximum number of errors to log before overwriting previous errors in buffer
+    
     public:
         KestrelFileHandler(Kestrel& logger_); //FIX! Should we pass in the max length of packets??
-        /**
+        // /**
+        // * @brief Initialize the system and generate new file paths for each type on the SD card
+        // * * @param tryBackhaul defaults to true, specifies if the initalization should try to backhaul the unsent logs
+        // * @details Pass in flags for critical fault and generic fault, also current system time
+        // * @return lvl 2 diagnostic 
+        // */    
+        // String begin(time_t time, bool &criticalFault, bool &fault, bool tryBackhaul = true);
+                /**
         * @brief Initialize the system and generate new file paths for each type on the SD card
-        * * @param tryBackhaul defaults to true, specifies if the initalization should try to backhaul the unsent logs
+        * @details Pass in flags for critical fault and generic fault, also current system time
         * @return lvl 2 diagnostic 
         */    
-        String begin(bool tryBackhaul = true);
+        String begin(time_t time, bool &criticalFault, bool &fault);
         /**
         * @brief Write the given data string to SD card
         * * @param[in] data: String of data to be written to SD card
@@ -81,10 +108,11 @@ class KestrelFileHandler {
         bool dumpFRAM();
         /**
         * @brief Runs self diagnostic of the file system 
-        * * @param[in] level: Denotes the level of diagnostic to run (5 ~ 1)
+        * * @param[in] diagnosticLevel: Denotes the level of diagnostic to run (5 ~ 1)
+        * * @param[in] time: Current system time
         * @details Self diagnostic result is returned as a JSON formatted string from the function  
         */  
-       String selfDiagnostic(uint8_t level);
+       String selfDiagnostic(uint8_t diagnosticLevel, time_t time);
        /**
         * @brief Attempts to backhaul old logs 
         * @details Tries to backhaul unsent logs if there is a network connection
@@ -96,6 +124,15 @@ class KestrelFileHandler {
         * @details Simply calls the erase command, allows system to start from clean slate
         */  
         bool eraseFRAM();
+        /**
+        * @brief Returns string of error codes
+        * @details Returns JSON formatted blob of current error codes
+        */  
+        String getErrors();
+
+    
+        String getMetadata();
+        String getData();
         
         
     private:

@@ -9,7 +9,8 @@ KestrelFileHandler::KestrelFileHandler(Kestrel& logger_) : logger(logger_), fram
     // logger = logger_;
 }
 
-String KestrelFileHandler::begin(bool tryBackhaul)
+// String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault, bool tryBackhaul)
+String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault)
 {
     selfPointer = this;
     SdFile::dateTimeCallback(dateTimeSD);
@@ -22,91 +23,128 @@ String KestrelFileHandler::begin(bool tryBackhaul)
     // fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer);
     if(currentPointer > memSizeFRAM) {
         Serial.println("ERROR: FRAM Pointer Overrun Reset"); //DEBUG!
+        throwError(FRAM_INDEX_EXCEEDED); 
         fram.put(memSizeFRAM - sizeof(memSizeFRAM), memSizeFRAM - sizeof(memSizeFRAM)); //Write default value in if not initialized already
         currentPointer = getStackPointer();
         // fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
         // Serial.print("New PointerA: "); //DEBUG!
         // Serial.println(currentPointer); //DEBUG!
     }
-    if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) {
-        sd.initErrorHalt();
-        //Throw Error!
+    if(!logger.sdInserted()) {
+        throwError(SD_NOT_INSERTED);
+        criticalFault = true;
     }
-    sd.mkdir("GEMS");
-    sd.chdir("/GEMS"); //Move into GEMS directory
-    // if(sd.isDir(String(Particle.deviceID()))) {
-    //     //FIX! Throw error
-    //     Serial.println("SD Dir not present");
-    // }
-    sd.mkdir(String(Particle.deviceID())); //Make directory from device ID if does not already exist
-    sd.chdir(String(Particle.deviceID()), false); //DEBUG! Restore
-    for(int i = 0; i < 5; i++) {
-        sd.mkdir(publishTypes[i]); //Make sub folders for each data type
-    }
-    sd.chdir(); //DEBUG! Go to root
-    //FIX! Add year beakdown??
-    // for(int i = 0; i < sizeof(publishTypes); i++) { //FIX! Causes assertion failure, not sure why??
-    retained static uint16_t fileIndex[4] = {1};
-    for(int i = 0; i < 4; i++) { //DEBUG!
-        filePaths[i] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[i]; //Create each file path base 
-        // uint16_t testFileIndex = 1; 
-        String testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json";
-        while(sd.exists(testFile) && fileIndex[i] < maxFileNum) {
-            fileIndex[i] += 1; //Increment file index and try again
-            testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json";
-            Serial.print(fileShortNames[i]); //DEBUG! 
-            Serial.print(String(fileIndex[i]));
-            Serial.print("\t");
-            Serial.println(System.freeMemory());
+    else { //Only try to interact with SD card if it is insertred 
+        if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) {
+            // sd.initErrorHalt();
+            throwError(SD_INIT_FAIL);
+            criticalFault = true; //Set critical fault if unable to connect to SD
+            //Throw Error!
         }
-        if(fileIndex[i] == maxFileNum) {
-            //FIX! Throw error
-            Serial.println("ERROR: SD Max File Num Exceeded");
+        if(!sd.exists("GEMS")) {
+            throwError(BASE_FOLDER_MISSING); //Report a warning that the base GEMS folder is not present 
+            sd.mkdir("GEMS"); //Make it if not already there
         }
-        else {
-            filePaths[i] = testFile; //Copy back test file to main file name source
+        
+        sd.chdir("/GEMS"); //Move into GEMS directory
+        // if(sd.isDir(String(Particle.deviceID()))) {
+        //     //FIX! Throw error
+        //     Serial.println("SD Dir not present");
+        // }
+        sd.mkdir(String(Particle.deviceID())); //Make directory from device ID if does not already exist
+        sd.chdir(String(Particle.deviceID()), false); //DEBUG! Restore
+        for(int i = 0; i < 5; i++) {
+            sd.mkdir(publishTypes[i]); //Make sub folders for each data type
         }
-        Serial.println(filePaths[i]); //DEBUG! Print out SD file paths
+        sd.chdir(); //DEBUG! Go to root
+        //FIX! Add year beakdown??
+        // for(int i = 0; i < sizeof(publishTypes); i++) { //FIX! Causes assertion failure, not sure why??
+        retained static uint16_t fileIndex[4] = {1};
+        for(int i = 0; i < 4; i++) { //DEBUG!
+            filePaths[i] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[i]; //Create each file path base 
+            // uint16_t testFileIndex = 1; 
+            String testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json";
+            while(sd.exists(testFile) && fileIndex[i] < maxFileNum) {
+                fileIndex[i] += 1; //Increment file index and try again
+                testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json";
+                Serial.print(fileShortNames[i]); //DEBUG! 
+                Serial.print(String(fileIndex[i]));
+                Serial.print("\t");
+                Serial.println(System.freeMemory());
+            }
+            if(fileIndex[i] == maxFileNum) {
+                //FIX! Throw error
+                throwError(FILE_LIMIT_EXCEEDED);
+                fault = true;
+                Serial.println("ERROR: SD Max File Num Exceeded");
+            }
+            else {
+                filePaths[i] = testFile; //Copy back test file to main file name source
+            }
+            Serial.println(filePaths[i]); //DEBUG! Print out SD file paths
+        }
+        // sd.chdir(String(Particle.deviceID()), false); //Move to device ID folder in order to make dump folder at right level
+        
+        filePaths[4] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + "/" + fileShortNames[4] + ".txt"; //Create base file path for unsent logs, use normal text file 
+        filePaths[5] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + "/" + fileShortNames[4] + "Temp"; //Create TEMP file path for unsent logs, no file extension since it should not be seen by eyes of man
+        // filePaths[4] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + fileShortNames[4] + ".txt"; //DEBUG!
+        Serial.println(filePaths[4]); //DEBUG! Print out Backhaul file path
+        // sd.chdir("/"); //Move back to root
+        sd.ls(); //DEBUG!
+        // if(sd.exists(filePaths[4])) { //Check if there exits a unsent log already (and we ask it to try), if so try to backhaul this
+        //     //FIX! Throw error
+        //     throwError(BACKLOG_PRESENT); //Report state if backhaul is desired or not
+        //     if(tryBackhaul) { //Only execute backhaul if requested 
+        //         Serial.println("Backhaul Unsent Logs"); //DEBUG!
+        //         backhaulUnsentLogs(); 
+        //     }
+            
+        // }
+        if(sd.exists(filePaths[4])) throwError(BACKLOG_PRESENT); //Report state if backhaul is desired or not
+        logger.enableSD(false); //Turn SD back off
     }
-    // sd.chdir(String(Particle.deviceID()), false); //Move to device ID folder in order to make dump folder at right level
-    
-    filePaths[4] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + "/" + fileShortNames[4] + ".txt"; //Create base file path for unsent logs, use normal text file 
-    filePaths[5] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + "/" + fileShortNames[4] + "Temp"; //Create TEMP file path for unsent logs, no file extension since it should not be seen by eyes of man
-    // filePaths[4] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[4] + fileShortNames[4] + ".txt"; //DEBUG!
-    Serial.println(filePaths[4]); //DEBUG! Print out Backhaul file path
-    // sd.chdir("/"); //Move back to root
-    sd.ls(); //DEBUG!
-    if(sd.exists(filePaths[4]) && tryBackhaul) { //Check if there exits a unsent log already (and we ask it to try), if so try to backhaul this
-        //FIX! Throw error
-        Serial.println("Backhaul Unsent Logs"); //DEBUG!
-        backhaulUnsentLogs(); 
-    }
-    logger.enableSD(false); //Turn SD back off
     // fram.get(memSizeFRAM - sizeof(memSizeFRAM), currentPointer); //DEBUG! Read back
-    currentPointer = getStackPointer(); //DEBUG! Read back
+    // currentPointer = getStackPointer(); //DEBUG! Read back
     // Serial.print("New PointerB: "); //DEBUG!
     // Serial.println(currentPointer); //DEBUG!
     return ""; //DEBUG!
 }
+String KestrelFileHandler::getData()
+{
+    return "";
+}
+
+String KestrelFileHandler::getMetadata()
+{
+    return "";
+}
+
 
 bool KestrelFileHandler::writeToSD(String data, String path)
 {
     logger.enableSD(true); //Turn on power to SD card
-    if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
-        sd.initErrorHalt(); //DEBUG!??
+    if(!logger.sdInserted()) {
+        throwError(SD_NOT_INSERTED);
     }
+    else { //Only talk to SD if it is inserted 
+        if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
+            // sd.initErrorHalt(); //DEBUG!??
+            throwError(SD_INIT_FAIL);
+        }
 
-    if (!sdFile.open(path, O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
-        sd.errorHalt("opening test.txt for write failed");
-        sdFile.close();
-        return false; //Return fail if not able to write
-        //FIX! ThrowError!
+        if (!sdFile.open(path, O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
+            // sd.errorHalt("opening test.txt for write failed");
+            sdFile.close();
+            throwError(SD_ACCESS_FAIL);
+            return false; //Return fail if not able to write
+            //FIX! ThrowError!
+        }
+        else {
+            sdFile.println(data); //Append data to end
+        }
+        sdFile.close(); //Regardless of access, close file when done 
     }
-    else {
-        sdFile.println(data); //Append data to end
-    }
-    sdFile.close(); //Regardless of access, close file when done 
-    // delay(10);
+        // delay(10);
     logger.enableSD(false); //Turn SD back off
     return true; //If get to this point, should have been success
     //FIX! Read back??
@@ -203,6 +241,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     if((stackPointer - blockOffset) < dataBlockEnd || (stackPointer - blockOffset) > memSizeFRAM) { //Check if overfun will occour, if so, dump the FRAM
         Serial.print("BAD POINTER: "); //DEBUG!
         Serial.println(stackPointer);
+        throwError(FRAM_OVERRUN);
         //THROW ERROR
         // if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         if(dumpToSD()) stackPointer = getStackPointer(); //If sucessfully dumped FRAM, grab new stack pointer and proceed
@@ -289,6 +328,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
         Serial.print("BAD POINTER: "); //DEBUG!
         Serial.println(stackPointer);
         //THROW ERROR
+        throwError(FRAM_OVERRUN);
         // if(dumpToSD()) fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         if(dumpToSD()) stackPointer = getStackPointer(); //If sucessfully dumped FRAM, grab new stack pointer and proceed
         else return false; //Otherwise stop trying to enter this log and return failure 
@@ -354,6 +394,7 @@ uint32_t KestrelFileHandler::readValFRAM(uint32_t pos, uint8_t len)
     }
     else {
         //FIX! Throw error
+        throwError(FRAM_ACCESS_FAIL);
         return 0; 
     }
 }
@@ -378,19 +419,26 @@ bool KestrelFileHandler::dumpFRAM()
     // uint8_t data[1024] = {0};
     logger.enableSD(true);
     logger.statLED(true); //Indicate backhaul in progress
-    if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
-        logger.enableSD(false);
-        delay(100);
-        logger.enableSD(true);
-        if(!sd.begin(chipSelect, SPI_FULL_SPEED)) {
-            Serial.println("SD Fail on retry"); //DEBUG!
-            sd.initErrorHalt(); //DEBUG!??
-        }
-        else {
-            //THROW ERROR - device needed to restart SD to get it to work
-        }
-        
+    if(!logger.sdInserted()) {
+        throwError(SD_NOT_INSERTED);
     }
+    else { //If inserted, try to initialize car
+        if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
+            logger.enableSD(false);
+            delay(100);
+            logger.enableSD(true);
+            if(!sd.begin(chipSelect, SPI_FULL_SPEED)) {
+                Serial.println("SD Fail on retry"); //DEBUG!
+                throwError(SD_INIT_FAIL);
+                // sd.initErrorHalt(); //DEBUG!??
+            }
+            else {
+                //THROW ERROR - device needed to restart SD to get it to work
+            }
+            
+        }
+    }
+
     // Serial.println("BACKHAUL"); //DEBUG!
     bool sentLocal = false; //Keep track if local storage was success
     bool sentRemote = false; //Keep track is remote sent was success 
@@ -438,7 +486,7 @@ bool KestrelFileHandler::dumpFRAM()
         // stackPointer += 2;
         // fram.readData(stackPointer, (uint8_t *)&data, dataLen); //Read in data array
         
-        if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::Both) {
+        if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::Both && logger.sdInserted()) { //Don't try this if SD not inserted 
             String fileName = "";
             // for(int i = 0; i < sizeof(publishTypes); i++) {
             for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
@@ -453,11 +501,12 @@ bool KestrelFileHandler::dumpFRAM()
                 }
             }
             if (!sdFile.open(fileName, O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
-                sd.errorHalt("opening test.txt for write failed");
+                // sd.errorHalt("opening test.txt for write failed");
                 sdFile.close();
                 sentLocal = false; //Clear global flag
                 // sentTemp = false; //Clear flag on fail
                 // return false; //Return fail if not able to write
+                throwError(SD_INIT_FAIL);
                 //FIX! ThrowError!
             }
             else {
@@ -566,15 +615,24 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
     // uint8_t data[1024] = {0};
     // logger.enableSD(true);
     logger.statLED(true); //Indicate backhaul in progress
-    if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
+    bool sent = true; //Begin as true, clear if any SD entry dump fails
+    bool sdInit = true; //Default to true, clear as failures occor 
+    if(!logger.sdInserted()) {
+        throwError(SD_NOT_INSERTED);
+        sdInit = false; //Clear flag
+    }
+    else if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
         //FIX! Throw error!
         //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
+        
         logger.enableSD(false);
         delay(100);
         logger.enableSD(true);
         if(!sd.begin(chipSelect, SPI_FULL_SPEED)) {
             Serial.println("SD Fail on retry"); //DEBUG!
-            sd.initErrorHalt(); //DEBUG!??
+            // sd.initErrorHalt(); //DEBUG!??
+            throwError(SD_INIT_FAIL);
+            sdInit = false; //Clear flag
         }
         else {
             //THROW ERROR - device needed to restart SD to get it to work
@@ -582,83 +640,143 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
         // sd.initErrorHalt(); //DEBUG!??
 
     }
-    // Serial.println("BACKHAUL"); //DEBUG!
-    bool sent = true; //Begin as true, clear if any Particle sends fail
-    while(stackPointer < memSizeFRAM) {
-        // bool sentTemp = false;
-        dataFRAM temp;
-        fram.get(stackPointer, temp);
-        // Serial.print("DEST: ");
-        // Serial.print(temp.destCode);
-        // Serial.print("\tDEST LEN: ");
-        // Serial.print(temp.destLen);
-        // Serial.print("\tDATA LEN: ");
-        // Serial.print(temp.dataLen);
-        // Serial.print("\tBLOCK END: ");
-        // Serial.println(temp.blockEnd);
-        // for(int i = 0; i < 1024; i++) { //DEBUG!
-        //     Serial.write(temp.data[i]);
-        // }
-        // Serial.print('\n');
-        // Serial.write((char*)temp.data, 1024); //DEBUG!
-        
-        // destCode = readValFRAM(stackPointer, 1); //Read in destination code
-        // stackPointer += 1; //Increment pointer
-        // blockEnd = readValFRAM(stackPointer, adrLenFRAM);
-        // stackPointer += adrLenFRAM;
-        // destLen = readValFRAM(stackPointer, 1);
-        // stackPointer += 1;
-        // fram.readData(stackPointer, (uint8_t *)&dest, destLen); //Read in dest array
-        // stackPointer += destLen;
-        // dataLen = readValFRAM(stackPointer, 2);
-        // stackPointer += 2;
-        // fram.readData(stackPointer, (uint8_t *)&data, dataLen); //Read in data array
-        
+    if(!sdInit) { //If the SD has failed to init for some reason 
+        bool cellStatus = logger.connectToCell();
+        if(cellStatus) {
+            while(stackPointer < memSizeFRAM) {
+                // bool sentTemp = false;
+                dataFRAM temp;
+                fram.get(stackPointer, temp);
+                
+                static unsigned long lastPublish = millis();
+                // delay(1000);
+                if((millis() - lastPublish) < 1000) { //If less than one second since last publish, wait to not overload particle 
+                    // Serial.print("Publish Delay: ");
+                    // Serial.println(1000 - (millis() - lastPublish));
+                    delay(1000 - (millis() - lastPublish)); //Wait for the remainder of 1 second in order to space out publish events
+                }
+                // else {
+                sent = Particle.publish((const char*)temp.dest, (const char*)temp.data, WITH_ACK);
+                // }
+                lastPublish = millis();
 
-        // String fileName = "";
-        // for(int i = 0; i < sizeof(publishTypes); i++) {
-        // for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
-        //     // Serial.println("SD String Vals:"); //DEBUG!
-        //     // Serial.write((const uint8_t*)temp.dest, temp.destLen);
-        //     // Serial.print("\n");
-        //     // Serial.println(publishTypes[i]);
-        //     if(strcmp(temp.dest, publishTypes[i].c_str()) == 0) {
-        //         fileName = filePaths[i]; //Once the destination is found, match it with the destination file
-        //         // Serial.println("\tMATCH");
-        //         break; //Exit for loop once match is found
-        //     }
-        // }
-        if (!sdFile.open(filePaths[4], O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
-            sd.errorHalt("opening test.txt for write failed"); //DEBUG!
-            sdFile.close();
-            sent = false; //Clear global flag
-            // sentTemp = false; //Clear flag on fail
-            // return false; //Return fail if not able to write
-            //FIX! ThrowError!
+                // sdFile.print(temp.destCode); //Print destination code
+                // sdFile.write('\t'); //Tab deliniate data
+                // sdFile.write(temp.dest, temp.destLen); //Write out destination 
+                // sdFile.print('\t'); //Tab deliniate data
+                // sdFile.write(temp.data, temp.dataLen); //Write out data
+                // sdFile.write('\n'); //Place newline at end of each entry
+
+                // sdFile.close(); //Regardless of access, close file when done
+                
+                if(sent == true) { //Only increment pointer if 
+                    // stackPointer += temp.dataLen + temp.destLen + 5; //Increment length of packet
+                    stackPointer += blockOffset;
+                    Serial.print("WRITE DUMP POINTER: "); //DEBUG!
+                    Serial.println(stackPointer);
+                    fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+                    // Serial.print("STACKPOINTER-READ+: ");
+                    // Serial.println(stackPointer);
+                }
+                else {
+                    throwError(PUBLISH_FAIL); 
+                    break;
+                }
+                    // return false; //If any send fails, just break out //FIX! Throw error
+                // sent = sent & sentTemp; //Update pervasive sent 
+            }
+            throwError(FRAM_EXPELLED);
         }
         else {
-            // if(temp.destCode != DestCodes::None) { //If entry has not already been backhauled //DEBUG!!!!
-                sdFile.print(temp.destCode); //Print destination code
-                sdFile.write('\t'); //Tab deliniate data
-                sdFile.write(temp.dest, temp.destLen); //Write out destination 
-                sdFile.print('\t'); //Tab deliniate data
-                sdFile.write(temp.data, temp.dataLen); //Write out data
-                sdFile.write('\n'); //Place newline at end of each entry
-            // }
+            //FIX! Write to EEPROM that you are officially screwed... 
+            Serial.println("Smokey, you're entering a world of pain...");
         }
-        sdFile.close(); //Regardless of access, close file when done
+    }
+    else { //Do normal dump
         
-        if(sent == true) { //Only increment pointer if 
-            // stackPointer += temp.dataLen + temp.destLen + 5; //Increment length of packet
-            stackPointer += blockOffset;
-            Serial.print("WRITE DUMP POINTER: "); //DEBUG!
-            Serial.println(stackPointer);
-            fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
-            // Serial.print("STACKPOINTER-READ+: ");
-            // Serial.println(stackPointer);
+        // Serial.println("BACKHAUL"); //DEBUG!
+        
+        while(stackPointer < memSizeFRAM) {
+            // bool sentTemp = false;
+            dataFRAM temp;
+            fram.get(stackPointer, temp);
+            // Serial.print("DEST: ");
+            // Serial.print(temp.destCode);
+            // Serial.print("\tDEST LEN: ");
+            // Serial.print(temp.destLen);
+            // Serial.print("\tDATA LEN: ");
+            // Serial.print(temp.dataLen);
+            // Serial.print("\tBLOCK END: ");
+            // Serial.println(temp.blockEnd);
+            // for(int i = 0; i < 1024; i++) { //DEBUG!
+            //     Serial.write(temp.data[i]);
+            // }
+            // Serial.print('\n');
+            // Serial.write((char*)temp.data, 1024); //DEBUG!
+            
+            // destCode = readValFRAM(stackPointer, 1); //Read in destination code
+            // stackPointer += 1; //Increment pointer
+            // blockEnd = readValFRAM(stackPointer, adrLenFRAM);
+            // stackPointer += adrLenFRAM;
+            // destLen = readValFRAM(stackPointer, 1);
+            // stackPointer += 1;
+            // fram.readData(stackPointer, (uint8_t *)&dest, destLen); //Read in dest array
+            // stackPointer += destLen;
+            // dataLen = readValFRAM(stackPointer, 2);
+            // stackPointer += 2;
+            // fram.readData(stackPointer, (uint8_t *)&data, dataLen); //Read in data array
+            
+
+            // String fileName = "";
+            // for(int i = 0; i < sizeof(publishTypes); i++) {
+            // for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
+            //     // Serial.println("SD String Vals:"); //DEBUG!
+            //     // Serial.write((const uint8_t*)temp.dest, temp.destLen);
+            //     // Serial.print("\n");
+            //     // Serial.println(publishTypes[i]);
+            //     if(strcmp(temp.dest, publishTypes[i].c_str()) == 0) {
+            //         fileName = filePaths[i]; //Once the destination is found, match it with the destination file
+            //         // Serial.println("\tMATCH");
+            //         break; //Exit for loop once match is found
+            //     }
+            // }
+            if (!sdFile.open(filePaths[4], O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
+                // sd.errorHalt("opening test.txt for write failed"); //DEBUG!
+                sdFile.close();
+                sent = false; //Clear global flag
+                throwError(SD_ACCESS_FAIL);
+                // sentTemp = false; //Clear flag on fail
+                // return false; //Return fail if not able to write
+                //FIX! ThrowError!
+            }
+            else {
+                // if(temp.destCode != DestCodes::None) { //If entry has not already been backhauled //DEBUG!!!!
+                    sdFile.print(temp.destCode); //Print destination code
+                    sdFile.write('\t'); //Tab deliniate data
+                    sdFile.write(temp.dest, temp.destLen); //Write out destination 
+                    sdFile.print('\t'); //Tab deliniate data
+                    sdFile.write(temp.data, temp.dataLen); //Write out data
+                    sdFile.write('\n'); //Place newline at end of each entry
+                // }
+            }
+            sdFile.close(); //Regardless of access, close file when done
+            
+            if(sent == true) { //Only increment pointer if 
+                // stackPointer += temp.dataLen + temp.destLen + 5; //Increment length of packet
+                stackPointer += blockOffset;
+                Serial.print("WRITE DUMP POINTER: "); //DEBUG!
+                Serial.println(stackPointer);
+                fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+                // Serial.print("STACKPOINTER-READ+: ");
+                // Serial.println(stackPointer);
+            }
+            else {
+                throwError(SD_ACCESS_FAIL); 
+                break;
+            }
+                // return false; //If any send fails, just break out //FIX! Throw error
+            // sent = sent & sentTemp; //Update pervasive sent 
         }
-        else return false; //If any send fails, just break out //FIX! Throw error
-        // sent = sent & sentTemp; //Update pervasive sent 
     }
     // delay(10);     
     logger.enableSD(false); //Turn SD back off
@@ -669,188 +787,197 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
 bool KestrelFileHandler::backhaulUnsentLogs()
 {
     logger.enableSD(true);
-    if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
-        //FIX! Throw error!
-        //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
-        sd.initErrorHalt(); //DEBUG!??
-        return 0;
+    if(!logger.sdInserted()) {
+        throwError(SD_NOT_INSERTED);
+        return false; //Return failure
     }
-    // Serial.println("BACKHAUL"); //DEBUG!
-    bool sent = true; //Begin as true, clear if any Particle sends fail
-    bool sentLocal = false; //Keep track if local storage was success
-    bool sentRemote = false; //Keep track is remote sent was success 
-    dataFRAM temp; //Instantiate struct to use as storage location
-    
-    // dataFRAM temp = {destination, blockEnd, destStr.length(), {0}, dataStr.length(), {0}};
-    // strcpy(temp.dest, destStr.c_str());
-    // strcpy(temp.data, dataStr.c_str());
-    File tempFile;
-    File normalLogFile;
-    logger.statLED(true); //Indicate backhaul in progress
-    if(sd.exists(filePaths[5])) { //If a temp file already exists, throw error since last unsent backhaul did not exit correctly 
-        //THROW ERROR! 
-    }
-    if (!sdFile.open(filePaths[4], O_RDONLY) || !tempFile.open(filePaths[5], O_RDWR | O_CREAT | O_AT_END)) { //Open existing file as read only (then delete at the end), open temp file normally 
-            sd.errorHalt("opening backhaul file or temp file failed"); //DEBUG!
-            sdFile.close();
-            tempFile.close();
-            sent = false; //Clear global flag
-            // sentTemp = false; //Clear flag on fail
-            // return false; //Return fail if not able to write
-            //FIX! ThrowError!
-    }
-    while(sdFile.available() > 0) { //While there is still data to read
+    else { //Don't bother trying to connect if no SD is connected 
+        if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
+            //FIX! Throw error!
+            //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
+            // sd.initErrorHalt(); //DEBUG!??
+            throwError(SD_INIT_FAIL);
+            return 0;
+        }
+        // Serial.println("BACKHAUL"); //DEBUG!
+        bool sent = true; //Begin as true, clear if any Particle sends fail
+        bool sentLocal = false; //Keep track if local storage was success
+        bool sentRemote = false; //Keep track is remote sent was success 
+        dataFRAM temp; //Instantiate struct to use as storage location
         
-        // else {
-            char destCodeStr[5] = {0}; //Allow for max of 3 numbers (plus null terminator, plus one to make sure it reads far enough - see fgets doc), since max val is 255
-            sdFile.fgets(destCodeStr, sizeof(destCodeStr), "\t"); //Grab destination code
-            temp.destCode = atoi(destCodeStr); //Convert to int and pass on to temp struct
-            // temp.destCode = temp.destCode & 0x0F; //Clear top nibble in order to read retry and normal as the same
-            temp.destLen = sdFile.fgets(temp.dest, sizeof(temp.dest), "\t"); //Grab destination string //FIX! Test for failure
-            temp.destLen = strcspn(temp.dest, "\n\t"); //Find first occourance of tab or newline (this is the end of the string, and the new length)
-            temp.dest[temp.destLen] = 0; //Remove any trailing stuff (tabs or newline)
-            // temp.dest[strcspn(temp.dest, "\n")] = 0; //Remove newline from returned value
-            temp.dataLen = sdFile.fgets(temp.data, sizeof(temp.data), "\n"); //Grab data string //FIX! Test for failure
-            temp.dataLen = strcspn(temp.data, "\n\t"); //Find first occourance of tab or newline (this is the end of the string, and the new length)
-            temp.data[temp.dataLen] = 0; //Remove any trailing stuff (tabs or newline)
+        // dataFRAM temp = {destination, blockEnd, destStr.length(), {0}, dataStr.length(), {0}};
+        // strcpy(temp.dest, destStr.c_str());
+        // strcpy(temp.data, dataStr.c_str());
+        File tempFile;
+        File normalLogFile;
+        logger.statLED(true); //Indicate backhaul in progress
+        if(sd.exists(filePaths[5])) { //If a temp file already exists, throw error since last unsent backhaul did not exit correctly 
+            //THROW ERROR! 
+        }
+        if (!sdFile.open(filePaths[4], O_RDONLY) || !tempFile.open(filePaths[5], O_RDWR | O_CREAT | O_AT_END)) { //Open existing file as read only (then delete at the end), open temp file normally 
+                // sd.errorHalt("opening backhaul file or temp file failed"); //DEBUG!
+                sdFile.close();
+                tempFile.close();
+                sent = false; //Clear global flag
+                throwError(SD_ACCESS_FAIL);
+                // sentTemp = false; //Clear flag on fail
+                // return false; //Return fail if not able to write
+                //FIX! ThrowError!
+        }
+        while(sdFile.available() > 0) { //While there is still data to read
             
-            // temp.data[strcspn(temp.data, "\n\t")] = 0; //Remove any trailing stuff (tabs or newline)
-            // temp.data[strcspn(temp.data, "\n")] = 0; //Remove newline from returned value
-            Serial.print("Dest Code: "); //DEBUG!
-            Serial.print(temp.destCode);
-            Serial.print("\tDest: ");
-            Serial.print(String(temp.dest));
-            Serial.print("\tData: ");
-            Serial.println(String(temp.data));
-            if(temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) {
-                sentLocal = false; //Default both to false
-                sentRemote = false; 
-            }
-            if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry) {
-                sentLocal = false;
-                sentRemote = true;
-            }
-            if(temp.destCode == DestCodes::Particle || temp.destCode == DestCodes::ParticleRetry) {
-                sentLocal = true;
-                sentRemote = false;
-            }
-            //Once read in, follow normal backhaul process
-            if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry || temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) { //First, write to SD file if needed
-                String fileName = "";
-                // for(int i = 0; i < sizeof(publishTypes); i++) {
-                for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
-                    // Serial.println("SD String Vals:"); //DEBUG!
-                    // Serial.write((const uint8_t*)temp.dest, temp.destLen);
-                    // Serial.print("\n");
-                    // Serial.println(publishTypes[i]);
-                    if(strcmp(temp.dest, publishTypes[i].c_str()) == 0) {
-                        fileName = filePaths[i]; //Once the destination is found, match it with the destination file
-                        // Serial.println("\tMATCH");
-                        Serial.print("SD File Dest: "); //DEBUG!
-                        Serial.println(fileName);
-                        break; //Exit for loop once match is found
-                    }
-                }
-                if (!normalLogFile.open(fileName, O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
-                    sd.errorHalt("opening normal log file failed");
-                    normalLogFile.close();
-                    sentLocal = false; //Clear global flag
-                    // sentTemp = false; //Clear flag on fail
-                    // return false; //Return fail if not able to write
-                    //FIX! ThrowError!
-                }
-                else {
-                    Serial.print("SD Backhaul to: "); //DEBUG!
-                    Serial.println(fileName);
-                    normalLogFile.write(temp.data, temp.dataLen); //Append data to end
-                    normalLogFile.write('\n'); //Place newline at end of each entry
-                    sentLocal = true;
-                }
-                normalLogFile.close(); //Regardless of access, close file when done     
-                // if(temp.destCode == DestCodes::Both && sentLocal == true) temp.destCode = DestCodes::Particle; //If succeded in writing to SD, set destCode just to particle
-                // if(temp.destCode == DestCodes::BothRetry && sentLocal == true) temp.destCode = DestCodes::BothRetry; //if succeded in switing to SD from retry val, set destCode to retry particle 
-            }
-            if(temp.destCode == DestCodes::Particle || temp.destCode == DestCodes::ParticleRetry || temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) {
-                if(!Particle.connected()) {
-                    //FIX! Throw error
-                    // return false; //If not connected to the cloud already, throw error and exit with fault
-                    // Serial.println("ERROR: Particle Disconnected"); //DEBUG!
-                    sentRemote = false; //DEBUG!
-                }
-                else {
-                    Serial.print("Particle Backhaul");
-                    static unsigned long lastPublish = millis();
-                    // delay(1000);
-                    if((millis() - lastPublish) < 1000) { //If less than one second since last publish, wait to not overload particle 
-                        // Serial.print("Publish Delay: ");
-                        // Serial.println(1000 - (millis() - lastPublish));
-                        delay(1000 - (millis() - lastPublish)); //Wait for the remainder of 1 second in order to space out publish events
-                    }
-                    // else {
-                    sentRemote = Particle.publish((const char*)temp.dest, (const char*)temp.data, WITH_ACK);
-                    // }
-                    lastPublish = millis();
-                    // Serial.println(sent);
-                    //FIX! If sent fail, throw error
-                }
-                // if(temp.destCode == DestCodes::Both && sentLocal == true) temp.destCode = DestCodes::Particle; //If succeded in writing to SD, set destCode just to particle
-                // if(temp.destCode == DestCodes::BothRetry && sentLocal == true) temp.destCode = DestCodes::BothRetry; //if succeded in switing to SD from retry val, set destCode to retry particle 
+            // else {
+                char destCodeStr[5] = {0}; //Allow for max of 3 numbers (plus null terminator, plus one to make sure it reads far enough - see fgets doc), since max val is 255
+                sdFile.fgets(destCodeStr, sizeof(destCodeStr), "\t"); //Grab destination code
+                temp.destCode = atoi(destCodeStr); //Convert to int and pass on to temp struct
+                // temp.destCode = temp.destCode & 0x0F; //Clear top nibble in order to read retry and normal as the same
+                temp.destLen = sdFile.fgets(temp.dest, sizeof(temp.dest), "\t"); //Grab destination string //FIX! Test for failure
+                temp.destLen = strcspn(temp.dest, "\n\t"); //Find first occourance of tab or newline (this is the end of the string, and the new length)
+                temp.dest[temp.destLen] = 0; //Remove any trailing stuff (tabs or newline)
+                // temp.dest[strcspn(temp.dest, "\n")] = 0; //Remove newline from returned value
+                temp.dataLen = sdFile.fgets(temp.data, sizeof(temp.data), "\n"); //Grab data string //FIX! Test for failure
+                temp.dataLen = strcspn(temp.data, "\n\t"); //Find first occourance of tab or newline (this is the end of the string, and the new length)
+                temp.data[temp.dataLen] = 0; //Remove any trailing stuff (tabs or newline)
                 
-            }
+                // temp.data[strcspn(temp.data, "\n\t")] = 0; //Remove any trailing stuff (tabs or newline)
+                // temp.data[strcspn(temp.data, "\n")] = 0; //Remove newline from returned value
+                Serial.print("Dest Code: "); //DEBUG!
+                Serial.print(temp.destCode);
+                Serial.print("\tDest: ");
+                Serial.print(String(temp.dest));
+                Serial.print("\tData: ");
+                Serial.println(String(temp.data));
+                if(temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) {
+                    sentLocal = false; //Default both to false
+                    sentRemote = false; 
+                }
+                if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry) {
+                    sentLocal = false;
+                    sentRemote = true;
+                }
+                if(temp.destCode == DestCodes::Particle || temp.destCode == DestCodes::ParticleRetry) {
+                    sentLocal = true;
+                    sentRemote = false;
+                }
+                //Once read in, follow normal backhaul process
+                if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry || temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) { //First, write to SD file if needed
+                    String fileName = "";
+                    // for(int i = 0; i < sizeof(publishTypes); i++) {
+                    for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
+                        // Serial.println("SD String Vals:"); //DEBUG!
+                        // Serial.write((const uint8_t*)temp.dest, temp.destLen);
+                        // Serial.print("\n");
+                        // Serial.println(publishTypes[i]);
+                        if(strcmp(temp.dest, publishTypes[i].c_str()) == 0) {
+                            fileName = filePaths[i]; //Once the destination is found, match it with the destination file
+                            // Serial.println("\tMATCH");
+                            Serial.print("SD File Dest: "); //DEBUG!
+                            Serial.println(fileName);
+                            break; //Exit for loop once match is found
+                        }
+                    }
+                    if (!normalLogFile.open(fileName, O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
+                        // sd.errorHalt("opening normal log file failed");
+                        throwError(SD_ACCESS_FAIL);
+                        normalLogFile.close();
+                        sentLocal = false; //Clear global flag
+                        // sentTemp = false; //Clear flag on fail
+                        // return false; //Return fail if not able to write
+                        //FIX! ThrowError!
+                    }
+                    else {
+                        Serial.print("SD Backhaul to: "); //DEBUG!
+                        Serial.println(fileName);
+                        normalLogFile.write(temp.data, temp.dataLen); //Append data to end
+                        normalLogFile.write('\n'); //Place newline at end of each entry
+                        sentLocal = true;
+                    }
+                    normalLogFile.close(); //Regardless of access, close file when done     
+                    // if(temp.destCode == DestCodes::Both && sentLocal == true) temp.destCode = DestCodes::Particle; //If succeded in writing to SD, set destCode just to particle
+                    // if(temp.destCode == DestCodes::BothRetry && sentLocal == true) temp.destCode = DestCodes::BothRetry; //if succeded in switing to SD from retry val, set destCode to retry particle 
+                }
+                if(temp.destCode == DestCodes::Particle || temp.destCode == DestCodes::ParticleRetry || temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) {
+                    if(!Particle.connected()) {
+                        //FIX! Throw error
+                        // return false; //If not connected to the cloud already, throw error and exit with fault
+                        // Serial.println("ERROR: Particle Disconnected"); //DEBUG!
+                        sentRemote = false; //DEBUG!
+                    }
+                    else {
+                        Serial.print("Particle Backhaul");
+                        static unsigned long lastPublish = millis();
+                        // delay(1000);
+                        if((millis() - lastPublish) < 1000) { //If less than one second since last publish, wait to not overload particle 
+                            // Serial.print("Publish Delay: ");
+                            // Serial.println(1000 - (millis() - lastPublish));
+                            delay(1000 - (millis() - lastPublish)); //Wait for the remainder of 1 second in order to space out publish events
+                        }
+                        // else {
+                        sentRemote = Particle.publish((const char*)temp.dest, (const char*)temp.data, WITH_ACK);
+                        // }
+                        lastPublish = millis();
+                        // Serial.println(sent);
+                        //FIX! If sent fail, throw error
+                    }
+                    // if(temp.destCode == DestCodes::Both && sentLocal == true) temp.destCode = DestCodes::Particle; //If succeded in writing to SD, set destCode just to particle
+                    // if(temp.destCode == DestCodes::BothRetry && sentLocal == true) temp.destCode = DestCodes::BothRetry; //if succeded in switing to SD from retry val, set destCode to retry particle 
+                    
+                }
 
-            if(sentLocal == false && sentRemote == false) { //Whichever method was intended, it failed. Just write it back on the stack
-                //Throw error - critical!
-                // writeToFRAM(String(temp.data), String(temp.dest), temp.destCode);
-                sent = false;
-            }
-            else if(sentLocal == false && sentRemote == true) { //Failed to write to SD card, but either did not try to write to cell or succeded
-                // if(temp.destCode == DestCodes::SD) writeToFRAM(String(temp.data), String(temp.dest), DestCodes::Both); //If we just tried to write to SD and it failed, lets try to write to both to see if we can get the data back at all
-                // if(temp.destCode == DestCodes::Both) writeToFRAM(String(temp.data), String(temp.dest), DestCodes::SD); //If we failed to write to the SD, but tried both, just write back to the SD
-                temp.destCode = DestCodes::SDRetry; //If cell works, but SD does not (really weird here), just tell it to try SD again
-                // if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry) temp.destCode = DestCodes::SDRetry; //If we just tried to write to SD and it failed, lets try to write to both to see if we can get the data back at all
-                // if(temp.destCode == DestCodes::SD) temp.destCode = DestCodes::BothRetry; //If this was the first attempt to send this, have it 
-                // if(temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) temp.destCode = DestCodes::SDRetry; //If we failed to write to the SD, but tried both, just write back to the SD
-                sent = false;
-            }
-            else if(sentLocal == true && sentRemote == false) { //Failed to write to cell, but either did not try to write to SD or succeded
-                temp.destCode = DestCodes::ParticleRetry; //If SD works but cell fails, just try cell again
-                // if(temp.destCode == DestCodes::Particle) fram.writeData(stackPointer, (const uint8_t *)&DestCodes::BothRetry, sizeof(DestCodes::BothRetry)); //If we just tried to write to cell and it failed, lets try to write to both to see if we can get the data back at all
-                // if(temp.destCode == DestCodes::Both) {
-                //     Serial.print("Cell Backhaul: "); //DEBUG!
-                //     Serial.println(String(temp.data)); //DEBUG!
-                //     // writeToFRAM(String(temp.data), String(temp.dest), DestCodes::Particle); //If we failed to write to the cell, but tried both, just write back to the cell
-                //     // fram.put(stackPointer, DestCodes::Particle);
-                //     fram.writeData(stackPointer, (const uint8_t *)&DestCodes::ParticleRetry, sizeof(DestCodes::ParticleRetry));
+                if(sentLocal == false && sentRemote == false) { //Whichever method was intended, it failed. Just write it back on the stack
+                    //Throw error - critical!
+                    // writeToFRAM(String(temp.data), String(temp.dest), temp.destCode);
+                    sent = false;
+                }
+                else if(sentLocal == false && sentRemote == true) { //Failed to write to SD card, but either did not try to write to cell or succeded
+                    // if(temp.destCode == DestCodes::SD) writeToFRAM(String(temp.data), String(temp.dest), DestCodes::Both); //If we just tried to write to SD and it failed, lets try to write to both to see if we can get the data back at all
+                    // if(temp.destCode == DestCodes::Both) writeToFRAM(String(temp.data), String(temp.dest), DestCodes::SD); //If we failed to write to the SD, but tried both, just write back to the SD
+                    temp.destCode = DestCodes::SDRetry; //If cell works, but SD does not (really weird here), just tell it to try SD again
+                    // if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry) temp.destCode = DestCodes::SDRetry; //If we just tried to write to SD and it failed, lets try to write to both to see if we can get the data back at all
+                    // if(temp.destCode == DestCodes::SD) temp.destCode = DestCodes::BothRetry; //If this was the first attempt to send this, have it 
+                    // if(temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) temp.destCode = DestCodes::SDRetry; //If we failed to write to the SD, but tried both, just write back to the SD
+                    sent = false;
+                }
+                else if(sentLocal == true && sentRemote == false) { //Failed to write to cell, but either did not try to write to SD or succeded
+                    temp.destCode = DestCodes::ParticleRetry; //If SD works but cell fails, just try cell again
+                    // if(temp.destCode == DestCodes::Particle) fram.writeData(stackPointer, (const uint8_t *)&DestCodes::BothRetry, sizeof(DestCodes::BothRetry)); //If we just tried to write to cell and it failed, lets try to write to both to see if we can get the data back at all
+                    // if(temp.destCode == DestCodes::Both) {
+                    //     Serial.print("Cell Backhaul: "); //DEBUG!
+                    //     Serial.println(String(temp.data)); //DEBUG!
+                    //     // writeToFRAM(String(temp.data), String(temp.dest), DestCodes::Particle); //If we failed to write to the cell, but tried both, just write back to the cell
+                    //     // fram.put(stackPointer, DestCodes::Particle);
+                    //     fram.writeData(stackPointer, (const uint8_t *)&DestCodes::ParticleRetry, sizeof(DestCodes::ParticleRetry));
+                    // }
+                    // sent = false;
+                }
+                else if(sentLocal == true && sentRemote == true)  { //If THIS write is good, nullify the destination, regardless of state of previous writes
+                    // fram.put(stackPointer, DestCodes::None);
+                    // fram.writeData(stackPointer, (const uint8_t *)&DestCodes::None, sizeof(DestCodes::None));
+                    temp.destCode = DestCodes::None; //If both pass, set entry as completed!
+                }
+                // stackPointer += blockOffset; //Increment local pointer
+                // if(sentLocal == true && sentRemote == true && sent == true) { //If good write (and have been no failures) pop entry from stack
+                //     fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
                 // }
-                // sent = false;
-            }
-            else if(sentLocal == true && sentRemote == true)  { //If THIS write is good, nullify the destination, regardless of state of previous writes
-                // fram.put(stackPointer, DestCodes::None);
-                // fram.writeData(stackPointer, (const uint8_t *)&DestCodes::None, sizeof(DestCodes::None));
-                temp.destCode = DestCodes::None; //If both pass, set entry as completed!
-            }
-            // stackPointer += blockOffset; //Increment local pointer
-            // if(sentLocal == true && sentRemote == true && sent == true) { //If good write (and have been no failures) pop entry from stack
-            //     fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+                if(temp.destCode != DestCodes::None) { //If entry has not been backhauled correctly, write it over to the temp file
+                    tempFile.print(temp.destCode); //Print destination code
+                    tempFile.write('\t'); //Tab deliniate data
+                    tempFile.write(temp.dest, temp.destLen); //Write out destination 
+                    tempFile.print('\t'); //Tab deliniate data
+                    tempFile.write(temp.data, temp.dataLen); //Write out data
+                    tempFile.write('\n'); //Place newline at end of each entry
+                }
             // }
-            if(temp.destCode != DestCodes::None) { //If entry has not been backhauled correctly, write it over to the temp file
-                tempFile.print(temp.destCode); //Print destination code
-                tempFile.write('\t'); //Tab deliniate data
-                tempFile.write(temp.dest, temp.destLen); //Write out destination 
-                tempFile.print('\t'); //Tab deliniate data
-                tempFile.write(temp.data, temp.dataLen); //Write out data
-                tempFile.write('\n'); //Place newline at end of each entry
-            }
-        // }
-    } 
+        } 
 
-    sdFile.close(); //Regardless of access, close file when done     
-    tempFile.close();
-    if(sent) {
-        Serial.println("File Swap!"); //DEBUG!
-        sd.remove(filePaths[4]); //Delete unsent file
-        sd.rename(filePaths[5], filePaths[4]); //Rename temp file to unsent file
-        sd.remove(filePaths[5]); //Delete temp file
+        sdFile.close(); //Regardless of access, close file when done     
+        tempFile.close();
+        if(sent) {
+            Serial.println("File Swap!"); //DEBUG!
+            sd.remove(filePaths[4]); //Delete unsent file
+            sd.rename(filePaths[5], filePaths[4]); //Rename temp file to unsent file
+            sd.remove(filePaths[5]); //Delete temp file
+        }
     }
     logger.statLED(false); 
     // delay(10);
@@ -877,6 +1004,7 @@ long KestrelFileHandler::getStackPointer()
         Wire.write(highByte);
         Wire.write(lowByte);
         error = Wire.endTransmission();
+        count++; //Increment counter each connect attempt 
         if(error == 0) { //Only proceed if able to talk to FRAM 
             Wire.requestFrom(0x50, 4);
             unsigned long localTime = millis();
@@ -894,13 +1022,108 @@ long KestrelFileHandler::getStackPointer()
     if(error == 0) return stackPointer; //If no error, return the read value
     else {
         //THROW ERROR
+        throwError(FRAM_INDEX_EXCEEDED);
         return dataBlockEnd; //Otherwise set back to the begining of data block in case of an error //FIX! Best option??
     }
 }
 
-String KestrelFileHandler::selfDiagnostic(uint8_t level)
+String KestrelFileHandler::getErrors()
 {
-    return ""; //DEBUG!
+
+	String output = "{\"Files\":{"; // OPEN JSON BLOB
+	output = output + "\"CODES\":["; //Open codes pair
+
+	for(int i = 0; i < min(MAX_NUM_ERRORS, numErrors); i++) { //Interate over used element of array without exceeding bounds
+		output = output + "\"0x" + String(errors[i], HEX) + "\","; //Add each error code
+		errors[i] = 0; //Clear errors as they are read
+	}
+	if(output.substring(output.length() - 1).equals(",")) {
+		output = output.substring(0, output.length() - 1); //Trim trailing ','
+	}
+	output = output + "],"; //close codes pair
+	output =  output + "\"OW\":"; //Open state pair
+	if(numErrors > MAX_NUM_ERRORS) output = output + "1,"; //If overwritten, indicate the overwrite is true
+	else output = output + "0,"; //Otherwise set it as clear
+	output = output + "\"NUM\":" + String(numErrors) + ","; //Append number of errors
+	output = output + "\"Pos\":[null]"; //Concatonate position 
+	output = output + "}}"; //CLOSE JSON BLOB
+	numErrors = 0; //Clear error count
+	return output;
+
+	// return -1; //Return fault if unknown cause 
+}
+
+String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
+{
+    String output = "{\"File\":{";
+	if(diagnosticLevel == 0) {
+		//TBD
+		output = output + "\"lvl-0\":{},";
+		// return output + "\"lvl-0\":{},\"Pos\":[" + String(port) + "]}}";
+	}
+
+	if(diagnosticLevel <= 1) {
+		//TBD
+		output = output + "\"lvl-1\":{},";
+	}
+
+	if(diagnosticLevel <= 2) {
+		//TBD
+		output = output + "\"lvl-2\":{},";
+	}
+
+	if(diagnosticLevel <= 3) {
+		//TBD
+		// Serial.println(millis()); //DEBUG!
+		output = output + "\"lvl-3\":{"; //OPEN JSON BLOB
+        output = output + "\"Files\":[";
+        for(int i = 0; i < sizeof(filePaths); i++) {
+            output = output + "\"" + filePaths[i] + "\""; //Concatonate file strings
+            if(i < sizeof(filePaths) - 1) output = output + ","; //Add comma seperator if not last entry
+        }
+
+		output = output + "},"; //CLOSE JSON BLOB
+		// return output + ",\"Pos\":[" + String(port) + "]}}";
+		// return output;
+
+ 	}
+
+	if(diagnosticLevel <= 4) {
+		// String output = selfDiagnostic(5); //Call the lower level of self diagnostic 
+		// output = output.substring(0,output.length() - 1); //Trim off closing brace
+		output = output + "\"lvl-4\":{"; //OPEN JSON BLOB
+		// uint8_t adr = (talon.sendCommand("?!")).toInt(); //Get address of local device 
+		// String stat = talon.command("M2", adr);
+		// Serial.print("STAT: "); //DEBUG!
+		// Serial.println(stat);
+
+		// delay(1000); //Wait 1 second to get data back //FIX! Wait for newline??
+		// String data = talon.command("D0", adr);
+		// Serial.print("DATA: "); //DEBUG!
+		// Serial.println(data);
+		// data.remove(0,2); //Trim leading address and +
+		// float angle = (data.trim()).toFloat();
+		// output = output + "\"Angle\":" + String(angle);
+		output = output + "},"; //CLOSE JSON BLOB
+		// return output + ",\"Pos\":[" + String(port) + "]}}";
+		// return output;
+
+	}
+
+	if(diagnosticLevel <= 5) {
+		output = output + "\"lvl-5\":{"; //OPEN JSON BLOB
+        bool obState = logger.enableI2C_OB(true);
+        bool globState = logger.enableI2C_Global(false);
+        long stackPointer = getStackPointer();
+        logger.enableI2C_Global(globState); //Return to previous state
+        logger.enableI2C_OB(obState);
+        output = output + "\"StackPointer\":" + String(stackPointer) + ",";
+        if(stackPointer != 0) output = output + "\"FRAM_Util\":" + String((100*(memSizeFRAM - stackPointer))/memSizeFRAM); //Report percentage of FRAM used
+		else output = output + "\"FRAM_Util\":null";
+        output = output + "}"; //Close pair
+		
+	}
+	return output + ",\"Pos\":[null]}}"; //Write position in logical form - Return compleated closed output
 }
 
 bool KestrelFileHandler::tryBackhaul()
@@ -909,6 +1132,7 @@ bool KestrelFileHandler::tryBackhaul()
         logger.enableSD(true); //Turn SD power on if not already
         if(sd.exists(filePaths[4])) { //Check if there exits a unsent log already, if so try to backhaul this
             //FIX! Throw error
+            throwError(BACKLOG_PRESENT);
             // Serial.println("Backhaul Unsent Logs"); //DEBUG!
             return backhaulUnsentLogs(); //Return pass/fail value from backhaul
         }
