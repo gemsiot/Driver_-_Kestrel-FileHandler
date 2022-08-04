@@ -488,8 +488,8 @@ bool KestrelFileHandler::dumpFRAM()
         
         if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::Both && logger.sdInserted()) { //Don't try this if SD not inserted 
             String fileName = "";
-            // for(int i = 0; i < sizeof(publishTypes); i++) {
-            for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
+            for(int i = 0; i < sizeof(publishTypes)/sizeof(publishTypes[0]); i++) {
+            // for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
                 // Serial.println("SD String Vals:"); //DEBUG!
                 // Serial.write((const uint8_t*)temp.dest, temp.destLen);
                 // Serial.print("\n");
@@ -862,8 +862,8 @@ bool KestrelFileHandler::backhaulUnsentLogs()
                 //Once read in, follow normal backhaul process
                 if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry || temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) { //First, write to SD file if needed
                     String fileName = "";
-                    // for(int i = 0; i < sizeof(publishTypes); i++) {
-                    for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
+                    for(int i = 0; i < sizeof(publishTypes)/sizeof(publishTypes[0]); i++) {
+                    // for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
                         // Serial.println("SD String Vals:"); //DEBUG!
                         // Serial.write((const uint8_t*)temp.dest, temp.destLen);
                         // Serial.print("\n");
@@ -1077,10 +1077,14 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
 		// Serial.println(millis()); //DEBUG!
 		output = output + "\"lvl-3\":{"; //OPEN JSON BLOB
         output = output + "\"Files\":[";
-        for(int i = 0; i < sizeof(filePaths); i++) {
+        uint8_t numFiles = sizeof(filePaths)/sizeof(filePaths[0]);
+        Serial.print("Num Files: "); //DEBUG!
+        Serial.println(numFiles);
+        for(int i = 0; i < numFiles; i++) { //FIX! Should check for sizeof(filePaths), but this causes a panic
             output = output + "\"" + filePaths[i] + "\""; //Concatonate file strings
-            if(i < sizeof(filePaths) - 1) output = output + ","; //Add comma seperator if not last entry
+            if(i < numFiles - 1) output = output + ","; //Add comma seperator if not last entry //FIX! should use sizeof(filePaths)
         }
+        output = output + "]"; //Close array
 
 		output = output + "},"; //CLOSE JSON BLOB
 		// return output + ",\"Pos\":[" + String(port) + "]}}";
