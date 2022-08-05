@@ -109,15 +109,15 @@ String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault)
     // Serial.println(currentPointer); //DEBUG!
     return ""; //DEBUG!
 }
-String KestrelFileHandler::getData()
-{
-    return "";
-}
+// String KestrelFileHandler::getData()
+// {
+//     return "";
+// }
 
-String KestrelFileHandler::getMetadata()
-{
-    return "";
-}
+// String KestrelFileHandler::getMetadata()
+// {
+//     return "";
+// }
 
 
 bool KestrelFileHandler::writeToSD(String data, String path)

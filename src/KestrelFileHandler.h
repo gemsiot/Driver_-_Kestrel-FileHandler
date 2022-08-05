@@ -131,8 +131,8 @@ class KestrelFileHandler: public Sensor
         String getErrors();
 
     
-        String getMetadata();
-        String getData();
+        // String getMetadata();
+        // String getData();
         
         
     private:
