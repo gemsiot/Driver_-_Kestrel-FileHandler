@@ -47,7 +47,7 @@ class KestrelFileHandler: public Sensor
     const uint32_t BASE_FOLDER_MISSING = 0xF00400F4;
     const uint32_t FRAM_INIT_FAIL = 0x400300F9;
     const uint32_t FRAM_ACCESS_FAIL = 0x400400F9;
-    const uint32_t FRAM_OVERRUN = 0x400500F9;
+    const uint32_t FRAM_OVERRUN = 0xF00500F9;
     const uint32_t FRAM_INDEX_EXCEEDED = 0x800400F4;
     const uint32_t BACKLOG_PRESENT = 0xF00600F4;
     const uint32_t PUBLISH_FAIL = 0x600100F6; ///<Connected, but fail to publish

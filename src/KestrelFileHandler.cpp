@@ -7,6 +7,7 @@ KestrelFileHandler* KestrelFileHandler::selfPointer;
 KestrelFileHandler::KestrelFileHandler(Kestrel& logger_) : logger(logger_), fram(Wire, 0) //Get copy of logger object for time calls and SD control
 {
     // logger = logger_;
+    sensorInterface = BusType::CORE;
 }
 
 // String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault, bool tryBackhaul)
@@ -41,7 +42,7 @@ String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault)
             criticalFault = true; //Set critical fault if unable to connect to SD
             //Throw Error!
         }
-        if(!sd.exists("GEMS")) {
+        else if(!sd.exists("GEMS")) {
             throwError(BASE_FOLDER_MISSING); //Report a warning that the base GEMS folder is not present 
             sd.mkdir("GEMS"); //Make it if not already there
         }
@@ -1030,7 +1031,7 @@ long KestrelFileHandler::getStackPointer()
 String KestrelFileHandler::getErrors()
 {
 
-	String output = "{\"Files\":{"; // OPEN JSON BLOB
+	String output = "\"Files\":{"; // OPEN JSON BLOB
 	output = output + "\"CODES\":["; //Open codes pair
 
 	for(int i = 0; i < min(MAX_NUM_ERRORS, numErrors); i++) { //Interate over used element of array without exceeding bounds
@@ -1046,7 +1047,7 @@ String KestrelFileHandler::getErrors()
 	else output = output + "0,"; //Otherwise set it as clear
 	output = output + "\"NUM\":" + String(numErrors) + ","; //Append number of errors
 	output = output + "\"Pos\":[null]"; //Concatonate position 
-	output = output + "}}"; //CLOSE JSON BLOB
+	output = output + "}"; //CLOSE JSON BLOB
 	numErrors = 0; //Clear error count
 	return output;
 
@@ -1055,27 +1056,27 @@ String KestrelFileHandler::getErrors()
 
 String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
 {
-    String output = "{\"File\":{";
+    String output = "\"File\":{";
 	if(diagnosticLevel == 0) {
 		//TBD
-		output = output + "\"lvl-0\":{},";
+		// output = output + "\"lvl-0\":{},";
 		// return output + "\"lvl-0\":{},\"Pos\":[" + String(port) + "]}}";
 	}
 
 	if(diagnosticLevel <= 1) {
 		//TBD
-		output = output + "\"lvl-1\":{},";
+		// output = output + "\"lvl-1\":{},";
 	}
 
 	if(diagnosticLevel <= 2) {
 		//TBD
-		output = output + "\"lvl-2\":{},";
+		// output = output + "\"lvl-2\":{},";
 	}
 
 	if(diagnosticLevel <= 3) {
 		//TBD
 		// Serial.println(millis()); //DEBUG!
-		output = output + "\"lvl-3\":{"; //OPEN JSON BLOB
+		// output = output + "\"lvl-3\":{"; //OPEN JSON BLOB
         output = output + "\"Files\":[";
         uint8_t numFiles = sizeof(filePaths)/sizeof(filePaths[0]);
         Serial.print("Num Files: "); //DEBUG!
@@ -1085,9 +1086,9 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
             else output = output + "\"" + filePaths[i] + "\""; //Concatonate file strings if file names are good
             if(i < numFiles - 1) output = output + ","; //Add comma seperator if not last entry //FIX! should use sizeof(filePaths)
         }
-        output = output + "]"; //Close array
+        output = output + "],"; //Close array
 
-		output = output + "},"; //CLOSE JSON BLOB
+		// output = output + "},"; //CLOSE JSON BLOB
 		// return output + ",\"Pos\":[" + String(port) + "]}}";
 		// return output;
 
@@ -1096,7 +1097,7 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
 	if(diagnosticLevel <= 4) {
 		// String output = selfDiagnostic(5); //Call the lower level of self diagnostic 
 		// output = output.substring(0,output.length() - 1); //Trim off closing brace
-		output = output + "\"lvl-4\":{"; //OPEN JSON BLOB
+		// output = output + "\"lvl-4\":{"; //OPEN JSON BLOB
 		// uint8_t adr = (talon.sendCommand("?!")).toInt(); //Get address of local device 
 		// String stat = talon.command("M2", adr);
 		// Serial.print("STAT: "); //DEBUG!
@@ -1109,26 +1110,26 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
 		// data.remove(0,2); //Trim leading address and +
 		// float angle = (data.trim()).toFloat();
 		// output = output + "\"Angle\":" + String(angle);
-		output = output + "},"; //CLOSE JSON BLOB
+		// output = output + "},"; //CLOSE JSON BLOB
 		// return output + ",\"Pos\":[" + String(port) + "]}}";
 		// return output;
 
 	}
 
 	if(diagnosticLevel <= 5) {
-		output = output + "\"lvl-5\":{"; //OPEN JSON BLOB
+		// output = output + "\"lvl-5\":{"; //OPEN JSON BLOB
         bool obState = logger.enableI2C_OB(true);
         bool globState = logger.enableI2C_Global(false);
         long stackPointer = getStackPointer();
         logger.enableI2C_Global(globState); //Return to previous state
         logger.enableI2C_OB(obState);
         output = output + "\"StackPointer\":" + String(stackPointer) + ",";
-        if(stackPointer != 0) output = output + "\"FRAM_Util\":" + String((100*(memSizeFRAM - stackPointer))/memSizeFRAM); //Report percentage of FRAM used
-		else output = output + "\"FRAM_Util\":null";
-        output = output + "}"; //Close pair
+        if(stackPointer != 0) output = output + "\"FRAM_Util\":" + String((100*(memSizeFRAM - stackPointer))/memSizeFRAM) + ","; //Report percentage of FRAM used
+		else output = output + "\"FRAM_Util\":null,";
+        // output = output + "}"; //Close pair
 		
 	}
-	return output + ",\"Pos\":[null]}}"; //Write position in logical form - Return compleated closed output
+	return output + "\"Pos\":[null]}"; //Write position in logical form - Return compleated closed output
 }
 
 bool KestrelFileHandler::tryBackhaul()
