@@ -52,7 +52,7 @@ class KestrelFileHandler: public Sensor
     const uint32_t BACKLOG_PRESENT = 0xF00600F4;
     const uint32_t PUBLISH_FAIL = 0x600100F6; ///<Connected, but fail to publish
     const uint32_t FRAM_EXPELLED = 0xF00900F4; ///<FRAM overrun dumped via cell, SD may be inconsistent 
-
+    const uint32_t OVERSIZE_PACKET = 0x900200F0; ///<Attempt to write too large of a packet to FRAM, packet ignored
 
     constexpr static  int MAX_NUM_ERRORS = 10; ///<Maximum number of errors to log before overwriting previous errors in buffer
     
@@ -142,12 +142,12 @@ class KestrelFileHandler: public Sensor
         // String diagnosticFilePath = ""; ///<Path describing the location of the diagnostic file on the SD card, updated each time `begin()` is run
         String filePaths[6] = {""}; ///<Paths for the location of the data files on the SD card (indicies mapped to DataType)
         const String fileShortNames[5] = {"Data","Err","Diag","Meta","Dump"};
-        String publishTypes[5] = {"data","error","diagnostic","metadata","unsent"}; ///<Defines the values sent for particle publish names
+        const String publishTypes[5] = {"data","error","diagnostic","metadata","unsent"}; ///<Defines the values sent for particle publish names
         static constexpr int MAX_MESSAGE_LENGTH = 1024; ///<Maximum number of characters allowed for single transmission 
         //FIX! Call from particle!
         const uint16_t maxFileNum = 9999; //Max number of files allowed 
-        uint32_t memSizeFRAM = 65536; ///<Default to 65536 words which corresponds to 512kB memory 
-        uint8_t adrLenFRAM = 2; ///<Default to using 2 bytes to encode address pointers, corresponds to 512kB memory
+        const uint32_t memSizeFRAM = 65536; ///<Default to 65536 words which corresponds to 512kB memory 
+        const uint8_t adrLenFRAM = 2; ///<Default to using 2 bytes to encode address pointers, corresponds to 512kB memory
         const uint32_t blockOffset = 1102; //FIX! Make variable
         const uint32_t dataBlockEnd = 0; ///<End of the data region of the FRAM (growing toawrd 0)
         SdFat sd;

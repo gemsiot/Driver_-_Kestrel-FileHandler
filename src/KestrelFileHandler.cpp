@@ -279,7 +279,8 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     String destStr = publishTypes[dataType]; //Intelegently assign destination string
     if(dataStr.length() > MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) {
-        //FIX! Throw error
+        // FIX! Throw error
+        throwError(OVERSIZE_PACKET); 
         return false; //If string is longer than can be transmitted in one packet, AND there are not line breaks to work with, throw error and exit
     }
     else if(dataStr.length() < MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) { //If less than max length and no line breaks, perform simple transmit
