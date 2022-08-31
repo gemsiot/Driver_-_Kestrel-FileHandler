@@ -444,7 +444,7 @@ bool KestrelFileHandler::dumpFRAM()
 {
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
-    logger.enableSD(true);
+    // logger.enableSD(true);
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     uint32_t stackPointer = getStackPointer(); //Grab stack pointer from end of FRAM
     // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab stack pointer from end of FRAM
@@ -850,6 +850,7 @@ bool KestrelFileHandler::backhaulUnsentLogs()
     logger.enableSD(true);
     if(!logger.sdInserted()) {
         throwError(SD_NOT_INSERTED);
+        logger.enableSD(false); //Turn power back off before exiting 
         return false; //Return failure
     }
     else { //Don't bother trying to connect if no SD is connected 
@@ -1259,6 +1260,55 @@ bool KestrelFileHandler::tryBackhaul()
     }
     return false; //If not connected to cell 
     
+}
+
+int KestrelFileHandler::sleep()
+{
+    switch(powerSaveMode) {
+        case PowerSaveModes::PERFROMANCE:
+            return 0; //Nothing to do for performance mode 
+            break; 
+        case PowerSaveModes::BALANCED:
+            logger.enableSD(false); //Turn off SD power
+            break;
+        case PowerSaveModes::LOW_POWER:
+            logger.enableSD(false); //Turn off SD power
+            break;
+        case PowerSaveModes::ULTRA_LOW_POWER:
+            logger.enableSD(false); //Turn off SD power
+            //SLEEP FRAM //FIX!
+            Wire.beginTransmission(0x7C);
+            Wire.write((0x50 << 1) | 0x01); //Shift to add "r/w" bit
+            Wire.endTransmission(false);
+            Wire.beginTransmission(0x43);
+            Wire.endTransmission();
+            break;
+        default:
+            //THROW ERROR??
+            return 0; //Mimic perfromance mode if not specificed  
+            break; 
+    }
+    return 1; //DEBUG! 
+}
+
+int KestrelFileHandler::wake()
+{
+    switch(powerSaveMode) {
+        case PowerSaveModes::PERFROMANCE:
+            return 0; //Nothing to do for performance mode 
+            break; 
+        case PowerSaveModes::LOW_POWER:
+            return 0;
+            break;
+        case PowerSaveModes::ULTRA_LOW_POWER:
+            getStackPointer(); //Get stack pointer to wake FRAM
+            break;
+        default:
+            //THROW ERROR??
+            return 0; //Mimic perfromance mode if not specificed  
+            break; 
+    }
+    return 1; //DEBUG!
 }
 
 void KestrelFileHandler::dateTimeSD(uint16_t* date, uint16_t* time) {
