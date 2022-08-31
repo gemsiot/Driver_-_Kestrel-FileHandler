@@ -129,6 +129,18 @@ class KestrelFileHandler: public Sensor
         * @details Returns JSON formatted blob of current error codes
         */  
         String getErrors();
+        /**
+        * @brief Puts the system into reduced power state
+        * @details Places system into variable power condition based on state of powerSaveMode
+        * @return Status of sleep attempt
+        */  
+        int sleep();
+        /**
+        * @brief Returns system to operational state
+        * @details Negates actions of sleep() call
+        * @return Status of wake attempt
+        */  
+        int wake();
 
     
         // String getMetadata();

@@ -137,6 +137,7 @@ bool KestrelFileHandler::writeToSD(String data, String path)
             // sd.errorHalt("opening test.txt for write failed");
             sdFile.close();
             throwError(SD_ACCESS_FAIL);
+            logger.enableSD(false); //Turn off before exiting 
             return false; //Return fail if not able to write
             //FIX! ThrowError!
         }
@@ -405,7 +406,7 @@ bool KestrelFileHandler::dumpFRAM()
 {
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
-    logger.enableSD(true);
+    // logger.enableSD(true);
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     uint32_t stackPointer = getStackPointer(); //Grab stack pointer from end of FRAM
     // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab stack pointer from end of FRAM
@@ -791,6 +792,7 @@ bool KestrelFileHandler::backhaulUnsentLogs()
     logger.enableSD(true);
     if(!logger.sdInserted()) {
         throwError(SD_NOT_INSERTED);
+        logger.enableSD(false); //Turn power back off before exiting 
         return false; //Return failure
     }
     else { //Don't bother trying to connect if no SD is connected 
@@ -799,6 +801,7 @@ bool KestrelFileHandler::backhaulUnsentLogs()
             //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
             // sd.initErrorHalt(); //DEBUG!??
             throwError(SD_INIT_FAIL);
+            logger.enableSD(true); //turn power back off before exiting 
             return 0;
         }
         // Serial.println("BACKHAUL"); //DEBUG!
@@ -1137,7 +1140,9 @@ bool KestrelFileHandler::tryBackhaul()
 {
     if(Particle.connected()) {
         logger.enableSD(true); //Turn SD power on if not already
-        if(sd.exists(filePaths[4])) { //Check if there exits a unsent log already, if so try to backhaul this
+        bool fileStatus = sd.exists(filePaths[4]); //grab status
+        logger.enableSD(false); //Turn SD back off
+        if(fileStatus) { //Check if there exits a unsent log already, if so try to backhaul this
             //FIX! Throw error
             throwError(BACKLOG_PRESENT);
             // Serial.println("Backhaul Unsent Logs"); //DEBUG!
@@ -1147,6 +1152,55 @@ bool KestrelFileHandler::tryBackhaul()
     }
     return false; //If not connected to cell 
     
+}
+
+int KestrelFileHandler::sleep()
+{
+    switch(powerSaveMode) {
+        case PowerSaveModes::PERFROMANCE:
+            return 0; //Nothing to do for performance mode 
+            break; 
+        case PowerSaveModes::BALANCED:
+            logger.enableSD(false); //Turn off SD power
+            break;
+        case PowerSaveModes::LOW_POWER:
+            logger.enableSD(false); //Turn off SD power
+            break;
+        case PowerSaveModes::ULTRA_LOW_POWER:
+            logger.enableSD(false); //Turn off SD power
+            //SLEEP FRAM //FIX!
+            Wire.beginTransmission(0x7C);
+            Wire.write((0x50 << 1) | 0x01); //Shift to add "r/w" bit
+            Wire.endTransmission(false);
+            Wire.beginTransmission(0x43);
+            Wire.endTransmission();
+            break;
+        default:
+            //THROW ERROR??
+            return 0; //Mimic perfromance mode if not specificed  
+            break; 
+    }
+    return 1; //DEBUG! 
+}
+
+int KestrelFileHandler::wake()
+{
+    switch(powerSaveMode) {
+        case PowerSaveModes::PERFROMANCE:
+            return 0; //Nothing to do for performance mode 
+            break; 
+        case PowerSaveModes::LOW_POWER:
+            return 0;
+            break;
+        case PowerSaveModes::ULTRA_LOW_POWER:
+            getStackPointer(); //Get stack pointer to wake FRAM
+            break;
+        default:
+            //THROW ERROR??
+            return 0; //Mimic perfromance mode if not specificed  
+            break; 
+    }
+    return 1; //DEBUG!
 }
 
 void KestrelFileHandler::dateTimeSD(uint16_t* date, uint16_t* time) {
