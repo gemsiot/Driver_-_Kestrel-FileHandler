@@ -53,7 +53,8 @@ class KestrelFileHandler: public Sensor
     const uint32_t PUBLISH_FAIL = 0x600100F6; ///<Connected, but fail to publish
     const uint32_t FRAM_EXPELLED = 0xF00900F4; ///<FRAM overrun dumped via cell, SD may be inconsistent 
     const uint32_t OVERSIZE_PACKET = 0x900200F0; ///<Attempt to write too large of a packet to FRAM, packet ignored
-
+    const uint32_t FILE_INDEX_OOR = 0xF00E00F9; ///<File index stored on FRAM is in some way out of the expected range
+    const uint32_t SD_FILE_NOT_FOUND = 0xF00D00F4; ///<Could not find the stored file index on SD card
     constexpr static  int MAX_NUM_ERRORS = 10; ///<Maximum number of errors to log before overwriting previous errors in buffer
     
     public:
@@ -149,7 +150,8 @@ class KestrelFileHandler: public Sensor
         const uint32_t memSizeFRAM = 65536; ///<Default to 65536 words which corresponds to 512kB memory 
         const uint8_t adrLenFRAM = 2; ///<Default to using 2 bytes to encode address pointers, corresponds to 512kB memory
         const uint32_t blockOffset = 1102; //FIX! Make variable
-        const uint32_t dataBlockEnd = 0; ///<End of the data region of the FRAM (growing toawrd 0)
+        const uint32_t dataBlockEnd = 8; ///<End of the data region of the FRAM (growing toawrd 0)
+
         SdFat sd;
         File sdFile;
         MB85RC256V fram;

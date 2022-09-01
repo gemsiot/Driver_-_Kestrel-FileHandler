@@ -62,16 +62,41 @@ String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault)
         // for(int i = 0; i < sizeof(publishTypes); i++) { //FIX! Causes assertion failure, not sure why??
         retained static uint16_t fileIndex[4] = {1};
         for(int i = 0; i < 4; i++) { //DEBUG!
+            uint16_t val = 0;
+            fram.get(i*2, val); //Grab stored filed indicies from first block of FRAM
+            if(isnan(val) || val > maxFileNum) {
+                if(isnan(val)) throwError(FILE_INDEX_OOR | 0x200); //OR with NaN sub indicator 
+                if(val > maxFileNum) throwError(FILE_INDEX_OOR | 0x100); //OR with greater than max indicator 
+                Serial.println("NaN FILE INDEX"); //DEBUG!
+                Serial.println(val);
+                fileIndex[i] = 0; //If there is an issue with the read, start from 0
+            }
+            else fileIndex[i] = val; //Otherwise, load the value to try into the file index
             filePaths[i] = "/GEMS/" + String(Particle.deviceID()) + "/" + publishTypes[i]; //Create each file path base 
             // uint16_t testFileIndex = 1; 
             String testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json";
+            if(!sd.exists(testFile) && fileIndex[i] > 0) { //If loaded file not found and it is not the first file, throw an error and reset file index back to 0 to start from begining
+                Serial.println("BAD FILE INDEX"); //DEBUG!
+                Serial.println(fileIndex[i]);
+                testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i] - 1) + ".json"; //Try previous index
+                if(!sd.exists(testFile)) { //Can't find expected index OR previous index
+                    throwError(SD_FILE_NOT_FOUND); //Throw error for file system not found
+                    fileIndex[i] = 0; //Reset back to 0 to start search over. Inneficient, but makes sure to not have weird file index
+                    testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json"; //Regenerate test string
+                    Serial.println("RESET INDEX"); //DEBUG!
+                }
+                else { //If previous index IS found
+                    throwError(SD_FILE_NOT_FOUND | 0x100); //Throw warning that new index not found, likely because logger did not write to files before shutting down
+                    Serial.println("PREVIOUS INDEX FOUND"); //DEBUG!
+                }
+            }
             while(sd.exists(testFile) && fileIndex[i] < maxFileNum) {
                 fileIndex[i] += 1; //Increment file index and try again
                 testFile = filePaths[i] + "/" + fileShortNames[i] + String(fileIndex[i]) + ".json";
                 Serial.print(fileShortNames[i]); //DEBUG! 
-                Serial.print(String(fileIndex[i]));
-                Serial.print("\t");
-                Serial.println(System.freeMemory());
+                Serial.println(String(fileIndex[i]));
+                // Serial.print("\t");
+                // Serial.println(System.freeMemory());
             }
             if(fileIndex[i] == maxFileNum) {
                 //FIX! Throw error
@@ -81,6 +106,7 @@ String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault)
             }
             else {
                 filePaths[i] = testFile; //Copy back test file to main file name source
+                fram.put(i*2, fileIndex[i]); //Put the final index back where we got it in the FRAM in case we lose power between now and next read
             }
             Serial.println(filePaths[i]); //DEBUG! Print out SD file paths
         }
@@ -1137,7 +1163,9 @@ bool KestrelFileHandler::tryBackhaul()
 {
     if(Particle.connected()) {
         logger.enableSD(true); //Turn SD power on if not already
-        if(sd.exists(filePaths[4])) { //Check if there exits a unsent log already, if so try to backhaul this
+        bool fileState = sd.exists(filePaths[4]); 
+        logger.enableSD(false); //Turn SD back off again
+        if(fileState) { //Check if there exits a unsent log already, if so try to backhaul this
             //FIX! Throw error
             throwError(BACKLOG_PRESENT);
             // Serial.println("Backhaul Unsent Logs"); //DEBUG!
