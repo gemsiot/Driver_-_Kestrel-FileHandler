@@ -1098,6 +1098,28 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
 	if(diagnosticLevel <= 2) {
 		//TBD
 		// output = output + "\"lvl-2\":{},";
+        logger.enableSD(true); //Make sure SD is turned on
+        if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) {
+            // sd.initErrorHalt();
+            throwError(SD_INIT_FAIL);
+        }
+        uint32_t cardSize = sd.card()->cardSize();
+        if (cardSize == 0) {
+            throwError(SD_ACCESS_FAIL); //Throw error if unable to read
+            output = output + "\"SD_Size\":null,"; //Append null if can't read
+        }
+        else {
+            cardSize = 0.000512*cardSize; //Convert to MB
+            output = output + "\"SD_Size\":" + String(cardSize) + ",";
+        }
+        cid_t cid;
+        if (!sd.card()->readCID(&cid)) {
+            throwError(SD_ACCESS_FAIL); //Throw error if unable to read
+        }
+        else {
+            output = output + "\"SD_SN\":" + String(cid.psn) + "," + "\"SD_MFG\":" + String(int(cid.mid)) + "," + "\"SD_TYPE\":" + String(sd.card()->type()) + ","; //Generate SD diagnostic string 
+        }
+
 	}
 
 	if(diagnosticLevel <= 3) {
