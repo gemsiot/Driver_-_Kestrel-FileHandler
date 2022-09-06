@@ -1103,14 +1103,16 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
             // sd.initErrorHalt();
             throwError(SD_INIT_FAIL);
         }
-        uint32_t cardSize = sd.card()->cardSize();
+        uint32_t cardSize = 0.000512*sd.card()->cardSize(); //Find card size, MB
+        uint32_t volFree = sd.vol()->freeClusterCount();
+        uint32_t freeSpace = 0.000512*volFree*sd.vol()->blocksPerCluster(); //Find free space, MB
         if (cardSize == 0) {
             throwError(SD_ACCESS_FAIL); //Throw error if unable to read
             output = output + "\"SD_Size\":null,"; //Append null if can't read
         }
         else {
-            cardSize = 0.000512*cardSize; //Convert to MB
-            output = output + "\"SD_Size\":" + String(cardSize) + ",";
+            // cardSize = 0.000512*cardSize; //Convert to MB
+            output = output + "\"SD_Size\":" + String(cardSize) + "," + "\"SD_Free\":" + String(freeSpace) + ",";
         }
         cid_t cid;
         if (!sd.card()->readCID(&cid)) {
@@ -1118,6 +1120,7 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
         }
         else {
             output = output + "\"SD_SN\":" + String(cid.psn) + "," + "\"SD_MFG\":" + String(int(cid.mid)) + "," + "\"SD_TYPE\":" + String(sd.card()->type()) + ","; //Generate SD diagnostic string 
+            //SD Type: 1 = SD1, 2 = SD2, 3 = SDHC/SDXC (depends on card size)
         }
 
 	}
