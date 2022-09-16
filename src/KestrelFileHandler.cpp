@@ -238,7 +238,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
         String temp = ""; //Make temp string to hold substrings 
         bool sent = true; //Keep track if any of the send attempts fail
         while(dataStr.indexOf('\n') > 0) {
-            temp = dataStr.substring(dataStr.lastIndexOf('\n')); 
+            temp = dataStr.substring(dataStr.lastIndexOf('\n') + 1); 
             //FIX! test if this substring is still too long because of bad parsing before, if so, throw error
             // sent = sent & Particle.publish(destStr, temp, WITH_ACK); //If any of the sends fail, sent will be cleared
             sent = sent & writeToFRAM(temp, destStr, destination); //Pass the line off for recursive processing 
@@ -323,7 +323,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, uint8_t dataType, uint8_t d
         String temp = ""; //Make temp string to hold substrings 
         bool sent = true; //Keep track if any of the send attempts fail
         while(dataStr.indexOf('\n') > 0) {
-            temp = dataStr.substring(dataStr.lastIndexOf('\n')); 
+            temp = dataStr.substring(dataStr.lastIndexOf('\n') + 1); 
             //FIX! test if this substring is still too long because of bad parsing before, if so, throw error
             // sent = sent & Particle.publish(destStr, temp, WITH_ACK); //If any of the sends fail, sent will be cleared
             sent = sent & writeToFRAM(temp, destStr, destination); //Pass the line off for recursive processing 
@@ -476,15 +476,15 @@ bool KestrelFileHandler::dumpFRAM()
         // bool sentTemp = false;
         dataFRAM temp;
         fram.get(stackPointer, temp);
-        if(temp.destCode == DestCodes::Both) {
+        if(temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) {
             sentLocal = false; //Default both to false
             sentRemote = false; 
         }
-        if(temp.destCode == DestCodes::SD) {
+        if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry) {
             sentLocal = false;
             sentRemote = true;
         }
-        if(temp.destCode == DestCodes::Particle) {
+        if(temp.destCode == DestCodes::Particle || temp.destCode == DestCodes::ParticleRetry) {
             sentLocal = true;
             sentRemote = false;
         }
@@ -514,7 +514,7 @@ bool KestrelFileHandler::dumpFRAM()
         // stackPointer += 2;
         // fram.readData(stackPointer, (uint8_t *)&data, dataLen); //Read in data array
         
-        if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::Both && logger.sdInserted()) { //Don't try this if SD not inserted 
+        if(temp.destCode == DestCodes::SD || temp.destCode == DestCodes::SDRetry || temp.destCode == DestCodes::Both || temp.destCode == DestCodes::SDRetry && logger.sdInserted()) { //Don't try this if SD not inserted 
             String fileName = "";
             for(int i = 0; i < sizeof(publishTypes)/sizeof(publishTypes[0]); i++) {
             // for(int i = 0; i < 4; i++) { //FIX! don't use magic number, checking against sizeof(publishTypes) causes overrun and crash
@@ -544,7 +544,7 @@ bool KestrelFileHandler::dumpFRAM()
             }
             sdFile.close(); //Regardless of access, close file when done     
         }
-        if(temp.destCode == DestCodes::Particle || temp.destCode == DestCodes::Both) {
+        if(temp.destCode == DestCodes::Particle || temp.destCode == DestCodes::ParticleRetry || temp.destCode == DestCodes::Both || temp.destCode == DestCodes::BothRetry) {
             if(!Particle.connected()) {
                 //FIX! Throw error
                 // return false; //If not connected to the cloud already, throw error and exit with fault
@@ -608,6 +608,9 @@ bool KestrelFileHandler::dumpFRAM()
             // fram.put(stackPointer, DestCodes::None);
             fram.writeData(stackPointer, (const uint8_t *)&DestCodes::None, sizeof(DestCodes::None));
         }
+        // else if(temp.destCode == DestCodes::ParticleRetry || temp.destCode == DestCodes::SDRetry || temp.destCode == DestCodes::BothRetry) { //If the code is a retry type code, and did NOT write back properly 
+        //     fram.writeData(stackPointer, (const uint8_t *)&temp.destCode, temp.destLen); //Write back 
+        // }
         stackPointer += blockOffset; //Increment local pointer
         if(sentLocal == true && sentRemote == true && sent == true) { //If good write (and have been no failures) pop entry from stack
             Serial.print("WRITE BACKHAUL POINTER: "); //DEBUG!
@@ -728,6 +731,14 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
             // bool sentTemp = false;
             dataFRAM temp;
             fram.get(stackPointer, temp);
+            if(temp.destCode != DestCodes::SD && temp.destCode != DestCodes::SDRetry && temp.destCode != DestCodes::Particle && 
+            temp.destCode != DestCodes::ParticleRetry && temp.destCode != DestCodes::Both && temp.destCode != DestCodes::BothRetry) { //If dest code not known, increment pointer and try again
+                stackPointer += blockOffset;
+                Serial.print("WRITE DUMP POINTER - Bad Dest Code: "); //DEBUG!
+                Serial.println(stackPointer);
+                fram.put(memSizeFRAM - sizeof(stackPointer), stackPointer); //Replace updated stack pointer at end of FRAM
+                continue;
+            }
             // Serial.print("DEST: ");
             // Serial.print(temp.destCode);
             // Serial.print("\tDEST LEN: ");
@@ -768,6 +779,7 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
             //         break; //Exit for loop once match is found
             //     }
             // }
+
             if (!sdFile.open(filePaths[4], O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
                 // sd.errorHalt("opening test.txt for write failed"); //DEBUG!
                 sdFile.close();
