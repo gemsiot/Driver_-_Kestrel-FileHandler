@@ -534,7 +534,7 @@ bool KestrelFileHandler::dumpFRAM()
                 sentLocal = false; //Clear global flag
                 // sentTemp = false; //Clear flag on fail
                 // return false; //Return fail if not able to write
-                throwError(SD_INIT_FAIL);
+                throwError(SD_ACCESS_FAIL);
                 //FIX! ThrowError!
             }
             else {
