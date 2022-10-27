@@ -154,22 +154,35 @@ bool KestrelFileHandler::writeToSD(String data, String path)
         throwError(SD_NOT_INSERTED);
     }
     else { //Only talk to SD if it is inserted 
-        if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
-            // sd.initErrorHalt(); //DEBUG!??
-            throwError(SD_INIT_FAIL);
+        WITH_LOCK(SPI){
+        if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) { //Initialize SD card, assume power has been cycled since last time
+            logger.enableSD(false);
+            delay(100);
+            logger.enableSD(true);
+            delay(100);
+            if(!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+                Serial.println("SD Fail on retry"); //DEBUG!
+                throwError(SD_INIT_FAIL | 0x100);
+                // sd.initErrorHalt(); //DEBUG!??
+            }
+            else {
+                //THROW ERROR - device needed to restart SD to get it to work
+            }
+            
         }
 
         if (!sdFile.open(path, O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
             // sd.errorHalt("opening test.txt for write failed");
             sdFile.close();
             throwError(SD_ACCESS_FAIL);
-            return false; //Return fail if not able to write
+            // return false; //Return fail if not able to write
             //FIX! ThrowError!
         }
         else {
             sdFile.println(data); //Append data to end
         }
         sdFile.close(); //Regardless of access, close file when done 
+        }
     }
         // delay(10);
     logger.enableSD(false); //Turn SD back off
@@ -451,19 +464,22 @@ bool KestrelFileHandler::dumpFRAM()
         throwError(SD_NOT_INSERTED);
     }
     else { //If inserted, try to initialize car
-        if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
-            logger.enableSD(false);
-            delay(100);
-            logger.enableSD(true);
-            if(!sd.begin(chipSelect, SPI_FULL_SPEED)) {
-                Serial.println("SD Fail on retry"); //DEBUG!
-                throwError(SD_INIT_FAIL);
-                // sd.initErrorHalt(); //DEBUG!??
+        WITH_LOCK(SPI){
+            if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) { //Initialize SD card, assume power has been cycled since last time
+                logger.enableSD(false);
+                delay(100);
+                logger.enableSD(true);
+                delay(100);
+                if(!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+                    Serial.println("SD Fail on retry"); //DEBUG!
+                    throwError(SD_INIT_FAIL | 0x100);
+                    // sd.initErrorHalt(); //DEBUG!??
+                }
+                else {
+                    //THROW ERROR - device needed to restart SD to get it to work
+                }
+                
             }
-            else {
-                //THROW ERROR - device needed to restart SD to get it to work
-            }
-            
         }
     }
 
@@ -471,8 +487,9 @@ bool KestrelFileHandler::dumpFRAM()
     bool sentLocal = false; //Keep track if local storage was success
     bool sentRemote = false; //Keep track is remote sent was success 
     bool sent = true; //Start as true and clear if any sends fail
-    
-    while(stackPointer + sizeof(stackPointer) < memSizeFRAM) {
+    int counts = 0; 
+    while(stackPointer + sizeof(stackPointer) < memSizeFRAM && counts < ceil(memSizeFRAM/blockOffset)) {
+        counts++;
         // bool sentTemp = false;
         dataFRAM temp;
         fram.get(stackPointer, temp);
@@ -648,33 +665,36 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
     logger.statLED(true); //Indicate backhaul in progress
     bool sent = true; //Begin as true, clear if any SD entry dump fails
     bool sdInit = true; //Default to true, clear as failures occor 
-    if(!logger.sdInserted()) {
-        throwError(SD_NOT_INSERTED);
-        sdInit = false; //Clear flag
-    }
-    else if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
-        //FIX! Throw error!
-        //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
-        
-        logger.enableSD(false);
-        delay(100);
-        logger.enableSD(true);
-        if(!sd.begin(chipSelect, SPI_FULL_SPEED)) {
-            Serial.println("SD Fail on retry"); //DEBUG!
-            // sd.initErrorHalt(); //DEBUG!??
-            throwError(SD_INIT_FAIL);
+    WITH_LOCK(SPI){
+        if(!logger.sdInserted()) {
+            throwError(SD_NOT_INSERTED);
             sdInit = false; //Clear flag
         }
-        else {
-            //THROW ERROR - device needed to restart SD to get it to work
-        }
-        // sd.initErrorHalt(); //DEBUG!??
+        else if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) { //Initialize SD card, assume power has been cycled since last time
+            //FIX! Throw error!
+            //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
+            
+            logger.enableSD(false);
+            delay(100);
+            logger.enableSD(true);
+            delay(100);
+            if(!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+                Serial.println("SD Fail on retry"); //DEBUG!
+                // sd.initErrorHalt(); //DEBUG!??
+                throwError(SD_INIT_FAIL | 0x100);
+                sdInit = false; //Clear flag
+            }
+            else {
+                //THROW ERROR - device needed to restart SD to get it to work
+            }
+            // sd.initErrorHalt(); //DEBUG!??
 
+        }
     }
     if(!sdInit) { //If the SD has failed to init for some reason 
         bool cellStatus = logger.connectToCell();
         if(cellStatus) {
-            while(stackPointer < memSizeFRAM) {
+            while(stackPointer + sizeof(stackPointer) < memSizeFRAM ) {
                 // bool sentTemp = false;
                 dataFRAM temp;
                 fram.get(stackPointer, temp);
@@ -727,7 +747,7 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
         
         // Serial.println("BACKHAUL"); //DEBUG!
         
-        while(stackPointer < memSizeFRAM) {
+        while(stackPointer + sizeof(stackPointer) < memSizeFRAM) {
             // bool sentTemp = false;
             dataFRAM temp;
             fram.get(stackPointer, temp);
@@ -779,27 +799,28 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
             //         break; //Exit for loop once match is found
             //     }
             // }
-
-            if (!sdFile.open(filePaths[4], O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
-                // sd.errorHalt("opening test.txt for write failed"); //DEBUG!
-                sdFile.close();
-                sent = false; //Clear global flag
-                throwError(SD_ACCESS_FAIL);
-                // sentTemp = false; //Clear flag on fail
-                // return false; //Return fail if not able to write
-                //FIX! ThrowError!
+            WITH_LOCK(SPI){
+                if (!sdFile.open(filePaths[4], O_RDWR | O_CREAT | O_AT_END)) { //Try to open the specified file
+                    // sd.errorHalt("opening test.txt for write failed"); //DEBUG!
+                    sdFile.close();
+                    sent = false; //Clear global flag
+                    throwError(SD_ACCESS_FAIL);
+                    // sentTemp = false; //Clear flag on fail
+                    // return false; //Return fail if not able to write
+                    //FIX! ThrowError!
+                }
+                else {
+                    // if(temp.destCode != DestCodes::None) { //If entry has not already been backhauled //DEBUG!!!!
+                        sdFile.print(temp.destCode); //Print destination code
+                        sdFile.write('\t'); //Tab deliniate data
+                        sdFile.write(temp.dest, temp.destLen); //Write out destination 
+                        sdFile.print('\t'); //Tab deliniate data
+                        sdFile.write(temp.data, temp.dataLen); //Write out data
+                        sdFile.write('\n'); //Place newline at end of each entry
+                    // }
+                }
+                sdFile.close(); //Regardless of access, close file when done
             }
-            else {
-                // if(temp.destCode != DestCodes::None) { //If entry has not already been backhauled //DEBUG!!!!
-                    sdFile.print(temp.destCode); //Print destination code
-                    sdFile.write('\t'); //Tab deliniate data
-                    sdFile.write(temp.dest, temp.destLen); //Write out destination 
-                    sdFile.print('\t'); //Tab deliniate data
-                    sdFile.write(temp.data, temp.dataLen); //Write out data
-                    sdFile.write('\n'); //Place newline at end of each entry
-                // }
-            }
-            sdFile.close(); //Regardless of access, close file when done
             
             if(sent == true) { //Only increment pointer if 
                 // stackPointer += temp.dataLen + temp.destLen + 5; //Increment length of packet
@@ -832,12 +853,29 @@ bool KestrelFileHandler::backhaulUnsentLogs()
         return false; //Return failure
     }
     else { //Don't bother trying to connect if no SD is connected 
-        if (!sd.begin(chipSelect, SPI_FULL_SPEED)) { //Initialize SD card, assume power has been cycled since last time
-            //FIX! Throw error!
-            //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
-            // sd.initErrorHalt(); //DEBUG!??
-            throwError(SD_INIT_FAIL);
-            return 0;
+        WITH_LOCK(SPI){
+            if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) { //Initialize SD card, assume power has been cycled since last time
+                //FIX! Throw error!
+                //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
+                // sd.initErrorHalt(); //DEBUG!??
+                logger.enableSD(false);
+                delay(100);
+                logger.enableSD(true);
+                delay(100);
+                if(!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+                    Serial.println("SD Fail on retry"); //DEBUG!
+                    // sd.initErrorHalt(); //DEBUG!??
+                    throwError(SD_INIT_FAIL | 0x100);
+                    logger.enableSD(false);
+                    return false;
+                }
+                else {
+                    //THROW ERROR - device needed to restart SD to get it to work
+                }
+                // logger.enableSD(false);
+                // throwError(SD_INIT_FAIL);
+                // return 0;
+            }
         }
         // Serial.println("BACKHAUL"); //DEBUG!
         bool sent = true; //Begin as true, clear if any Particle sends fail
@@ -851,10 +889,11 @@ bool KestrelFileHandler::backhaulUnsentLogs()
         File tempFile;
         File normalLogFile;
         logger.statLED(true); //Indicate backhaul in progress
-        if(sd.exists(filePaths[5])) { //If a temp file already exists, throw error since last unsent backhaul did not exit correctly 
+        WITH_LOCK(SPI){
+            if(sd.exists(filePaths[5])) { //If a temp file already exists, throw error since last unsent backhaul did not exit correctly 
             //THROW ERROR! 
-        }
-        if (!sdFile.open(filePaths[4], O_RDONLY) || !tempFile.open(filePaths[5], O_RDWR | O_CREAT | O_AT_END)) { //Open existing file as read only (then delete at the end), open temp file normally 
+            }
+            if (!sdFile.open(filePaths[4], O_RDONLY) || !tempFile.open(filePaths[5], O_RDWR | O_CREAT | O_AT_END)) { //Open existing file as read only (then delete at the end), open temp file normally 
                 // sd.errorHalt("opening backhaul file or temp file failed"); //DEBUG!
                 sdFile.close();
                 tempFile.close();
@@ -863,8 +902,8 @@ bool KestrelFileHandler::backhaulUnsentLogs()
                 // sentTemp = false; //Clear flag on fail
                 // return false; //Return fail if not able to write
                 //FIX! ThrowError!
-        }
-        while(sdFile.available() > 0) { //While there is still data to read
+            }
+            while(sdFile.available() > 0) { //While there is still data to read
             
             // else {
                 char destCodeStr[5] = {0}; //Allow for max of 3 numbers (plus null terminator, plus one to make sure it reads far enough - see fgets doc), since max val is 255
@@ -1010,13 +1049,14 @@ bool KestrelFileHandler::backhaulUnsentLogs()
             // }
         } 
 
-        sdFile.close(); //Regardless of access, close file when done     
-        tempFile.close();
-        if(sent) {
-            Serial.println("File Swap!"); //DEBUG!
-            sd.remove(filePaths[4]); //Delete unsent file
-            sd.rename(filePaths[5], filePaths[4]); //Rename temp file to unsent file
-            sd.remove(filePaths[5]); //Delete temp file
+            sdFile.close(); //Regardless of access, close file when done     
+            tempFile.close();
+            if(sent) {
+                Serial.println("File Swap!"); //DEBUG!
+                sd.remove(filePaths[4]); //Delete unsent file
+                sd.rename(filePaths[5], filePaths[4]); //Rename temp file to unsent file
+                sd.remove(filePaths[5]); //Delete temp file
+            }
         }
     }
     logger.statLED(false); 
@@ -1111,29 +1151,33 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
 		//TBD
 		// output = output + "\"lvl-2\":{},";
         logger.enableSD(true); //Make sure SD is turned on
-        if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) {
-            // sd.initErrorHalt();
-            throwError(SD_INIT_FAIL);
+        WITH_LOCK(SPI){
+            if (!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+                // sd.initErrorHalt();
+                throwError(SD_INIT_FAIL);
+                logger.enableSD(false);
+            }
+            uint32_t cardSize = 0.000512*sd.card()->cardSize(); //Find card size, MB
+            uint32_t volFree = sd.vol()->freeClusterCount();
+            uint32_t freeSpace = 0.000512*volFree*sd.vol()->blocksPerCluster(); //Find free space, MB
+            if (cardSize == 0) {
+                throwError(SD_ACCESS_FAIL); //Throw error if unable to read
+                output = output + "\"SD_Size\":null,"; //Append null if can't read
+            }
+            else {
+                // cardSize = 0.000512*cardSize; //Convert to MB
+                output = output + "\"SD_Size\":" + String(cardSize) + "," + "\"SD_Free\":" + String(freeSpace) + ",";
+            }
+            cid_t cid;
+            if (!sd.card()->readCID(&cid)) {
+                throwError(SD_ACCESS_FAIL); //Throw error if unable to read
+            }
+            else {
+                output = output + "\"SD_SN\":" + String(cid.psn) + "," + "\"SD_MFG\":" + String(int(cid.mid)) + "," + "\"SD_TYPE\":" + String(sd.card()->type()) + ","; //Generate SD diagnostic string 
+                //SD Type: 1 = SD1, 2 = SD2, 3 = SDHC/SDXC (depends on card size)
+            }
         }
-        uint32_t cardSize = 0.000512*sd.card()->cardSize(); //Find card size, MB
-        uint32_t volFree = sd.vol()->freeClusterCount();
-        uint32_t freeSpace = 0.000512*volFree*sd.vol()->blocksPerCluster(); //Find free space, MB
-        if (cardSize == 0) {
-            throwError(SD_ACCESS_FAIL); //Throw error if unable to read
-            output = output + "\"SD_Size\":null,"; //Append null if can't read
-        }
-        else {
-            // cardSize = 0.000512*cardSize; //Convert to MB
-            output = output + "\"SD_Size\":" + String(cardSize) + "," + "\"SD_Free\":" + String(freeSpace) + ",";
-        }
-        cid_t cid;
-        if (!sd.card()->readCID(&cid)) {
-            throwError(SD_ACCESS_FAIL); //Throw error if unable to read
-        }
-        else {
-            output = output + "\"SD_SN\":" + String(cid.psn) + "," + "\"SD_MFG\":" + String(int(cid.mid)) + "," + "\"SD_TYPE\":" + String(sd.card()->type()) + ","; //Generate SD diagnostic string 
-            //SD Type: 1 = SD1, 2 = SD2, 3 = SDHC/SDXC (depends on card size)
-        }
+        logger.enableSD(false);
 
 	}
 
@@ -1200,7 +1244,10 @@ bool KestrelFileHandler::tryBackhaul()
 {
     if(Particle.connected()) {
         logger.enableSD(true); //Turn SD power on if not already
-        bool fileState = sd.exists(filePaths[4]); 
+        bool fileState = false;
+        WITH_LOCK(SPI) {
+            fileState = sd.exists(filePaths[4]); 
+        }
         logger.enableSD(false); //Turn SD back off again
         if(fileState) { //Check if there exits a unsent log already, if so try to backhaul this
             //FIX! Throw error
