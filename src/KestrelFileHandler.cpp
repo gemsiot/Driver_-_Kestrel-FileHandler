@@ -1318,7 +1318,7 @@ void KestrelFileHandler::dateTimeSD(uint16_t* date, uint16_t* time) {
 //  Serial.println(timestamp);
 
 uint8_t source = selfPointer->logger.updateTime();
-if(source > TimeSource::NONE) { //Only write time back if time is legit
+if(source != TimeSource::NONE) { //Only write time back if time is legit
     Serial.print("SD Date: "); //DEBUG!
     Serial.print(selfPointer->logger.currentDateTime.year);
     Serial.print("/");
