@@ -155,7 +155,7 @@ class KestrelFileHandler: public Sensor
         // String diagnosticFilePath = ""; ///<Path describing the location of the diagnostic file on the SD card, updated each time `begin()` is run
         String filePaths[6] = {""}; ///<Paths for the location of the data files on the SD card (indicies mapped to DataType)
         const String fileShortNames[5] = {"Data","Err","Diag","Meta","Dump"};
-        const String publishTypes[5] = {"data","error","diagnostic","metadata","unsent"}; ///<Defines the values sent for particle publish names
+        const String publishTypes[5] = {"data/v2","error/v2","diagnostic/v2","metadata/v2","unsent"}; ///<Defines the values sent for particle publish names
         static constexpr int MAX_MESSAGE_LENGTH = 1024; ///<Maximum number of characters allowed for single transmission 
         //FIX! Call from particle!
         const uint16_t maxFileNum = 9999; //Max number of files allowed 

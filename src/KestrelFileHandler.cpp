@@ -1298,7 +1298,8 @@ int KestrelFileHandler::wake()
             return 0; //Nothing to do for performance mode 
             break; 
         case PowerSaveModes::LOW_POWER:
-            return 0;
+            // return 0;
+            getStackPointer(); //Get stack pointer to wake FRAM
             break;
         case PowerSaveModes::ULTRA_LOW_POWER:
             getStackPointer(); //Get stack pointer to wake FRAM
