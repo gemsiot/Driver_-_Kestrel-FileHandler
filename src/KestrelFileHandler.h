@@ -55,6 +55,7 @@ class KestrelFileHandler: public Sensor
     const uint32_t OVERSIZE_PACKET = 0x900200F0; ///<Attempt to write too large of a packet to FRAM, packet ignored
     const uint32_t FILE_INDEX_OOR = 0xF00E00F9; ///<File index stored on FRAM is in some way out of the expected range
     const uint32_t SD_FILE_NOT_FOUND = 0xF00D00F4; ///<Could not find the stored file index on SD card
+    const uint32_t PACKET_LEN_EXCEEDED = 0xF0160009; ///<Max length of packet exceeded without termination breaks
     constexpr static  int MAX_NUM_ERRORS = 10; ///<Maximum number of errors to log before overwriting previous errors in buffer
     
     public:

@@ -234,7 +234,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     // Serial.println(dataStr.length());
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     if(dataStr.length() > MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) {
-        //FIX! Throw error
+        throwError(PACKET_LEN_EXCEEDED);
         return false; //If string is longer than can be transmitted in one packet, AND there are not line breaks to work with, throw error and exit
     }
     else if(dataStr.length() < MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) { //If less than max length and no line breaks, perform simple transmit
