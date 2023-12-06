@@ -1237,7 +1237,12 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
         logger.enableI2C_Global(globState); //Return to previous state
         logger.enableI2C_OB(obState);
         output = output + "\"StackPointer\":" + String(stackPointer) + ",";
-        if(stackPointer != 0) output = output + "\"FRAM_Util\":" + String((100*(memSizeFRAM - stackPointer))/memSizeFRAM) + ","; //Report percentage of FRAM used
+        if(stackPointer != 0) {
+            int framPer = (100*(memSizeFRAM - stackPointer))/memSizeFRAM;
+            output = output + "\"FRAM_Util\":" + String(framPer) + ","; //Report percentage of FRAM used
+            if(framPer >= 90) throwError(FRAM_SPACE_CRITICAL); //If less than 10% left, throw critical warning
+            else if(framPer >= 75) throwError(FRAM_SPACE_WARNING); //If less than 25% but more than 10% left, throw general warning
+        }
 		else output = output + "\"FRAM_Util\":null,";
         // output = output + "}"; //Close pair
 		
