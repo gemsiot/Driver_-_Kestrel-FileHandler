@@ -1068,7 +1068,11 @@ bool KestrelFileHandler::backhaulUnsentLogs()
 
 bool KestrelFileHandler::eraseFRAM()
 {
-    return fram.erase();
+    logger.enableI2C_Global(false); //Disable external I2C
+    logger.enableI2C_OB(true); //Turn on internal I2C
+    bool error = fram.erase();
+    fram.put(memSizeFRAM - sizeof(memSizeFRAM), memSizeFRAM - sizeof(memSizeFRAM)); //Put in default stack pointer
+    return error;
 }
 
 long KestrelFileHandler::getStackPointer()
