@@ -54,7 +54,7 @@ class KestrelFileHandler: public Sensor
     const uint32_t FRAM_OVERRUN = 0xF00500F9;
     const uint32_t FRAM_INDEX_EXCEEDED = 0x800400F4;
     const uint32_t BACKLOG_PRESENT = 0xF00600F4;
-    const uint32_t PUBLISH_FAIL = 0x600100F6; ///<Connected, but fail to publish
+    const uint32_t PUBLISH_FAIL = 0x600300F6; ///<Connected, but fail to publish
     const uint32_t FRAM_EXPELLED = 0xF00900F4; ///<FRAM overrun dumped via cell, SD may be inconsistent 
     const uint32_t OVERSIZE_PACKET = 0x900200F0; ///<Attempt to write too large of a packet to FRAM, packet ignored
     const uint32_t FILE_INDEX_OOR = 0xF00E00F9; ///<File index stored on FRAM is in some way out of the expected range
