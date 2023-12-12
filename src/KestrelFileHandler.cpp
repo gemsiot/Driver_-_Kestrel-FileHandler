@@ -1,3 +1,5 @@
+//© 2023 Regents of the University of Minnesota. All rights reserved.
+
 #include <KestrelFileHandler.h>
 #include <Kestrel.h>
 
