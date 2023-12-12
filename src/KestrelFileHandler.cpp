@@ -38,7 +38,7 @@ String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault)
         criticalFault = true;
     }
     else { //Only try to interact with SD card if it is insertred 
-        if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) {
+        if (!sd.begin(chipSelect, SD_SCK_MHZ(20))) {
             // sd.initErrorHalt();
             throwError(SD_INIT_FAIL);
             criticalFault = true; //Set critical fault if unable to connect to SD
@@ -62,7 +62,7 @@ String KestrelFileHandler::begin(time_t time, bool &criticalFault, bool &fault)
         sd.chdir(); //DEBUG! Go to root
         //FIX! Add year beakdown??
         // for(int i = 0; i < sizeof(publishTypes); i++) { //FIX! Causes assertion failure, not sure why??
-        retained static uint16_t fileIndex[4] = {1};
+        retained static uint16_t fileIndex[4] = {1, 1, 1, 1};
         for(int i = 0; i < 4; i++) { //DEBUG!
             uint16_t val = 0;
             fram.get(i*2, val); //Grab stored filed indicies from first block of FRAM
@@ -157,12 +157,12 @@ bool KestrelFileHandler::writeToSD(String data, String path)
     }
     else { //Only talk to SD if it is inserted 
         WITH_LOCK(SPI){
-        if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) { //Initialize SD card, assume power has been cycled since last time
+        if (!sd.begin(chipSelect, SD_SCK_MHZ(20))) { //Initialize SD card, assume power has been cycled since last time
             logger.enableSD(false);
             delay(100);
             logger.enableSD(true);
             delay(100);
-            if(!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+            if(!sd.begin(chipSelect, SD_SCK_MHZ(10))) {
                 Serial.println("SD Fail on retry"); //DEBUG!
                 throwError(SD_INIT_FAIL | 0x100);
                 // sd.initErrorHalt(); //DEBUG!??
@@ -236,7 +236,7 @@ bool KestrelFileHandler::writeToFRAM(String dataStr, String destStr, uint8_t des
     // Serial.println(dataStr.length());
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     if(dataStr.length() > MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) {
-        //FIX! Throw error
+        throwError(PACKET_LEN_EXCEEDED);
         return false; //If string is longer than can be transmitted in one packet, AND there are not line breaks to work with, throw error and exit
     }
     else if(dataStr.length() < MAX_MESSAGE_LENGTH && dataStr.indexOf('\n') < 0) { //If less than max length and no line breaks, perform simple transmit
@@ -446,7 +446,7 @@ bool KestrelFileHandler::dumpFRAM()
 {
     logger.enableI2C_Global(false); //Disable external I2C
     logger.enableI2C_OB(true); //Turn on internal I2C
-    logger.enableSD(true);
+    // logger.enableSD(true);
     // uint32_t stackPointer = readValFRAM(memSizeFRAM - adrLenFRAM, adrLenFRAM); //Read from bottom bytes to get position to start actual read from
     uint32_t stackPointer = getStackPointer(); //Grab stack pointer from end of FRAM
     // fram.get(memSizeFRAM - sizeof(stackPointer), stackPointer); //Grab stack pointer from end of FRAM
@@ -467,12 +467,12 @@ bool KestrelFileHandler::dumpFRAM()
     }
     else { //If inserted, try to initialize car
         WITH_LOCK(SPI){
-            if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) { //Initialize SD card, assume power has been cycled since last time
+            if (!sd.begin(chipSelect, SD_SCK_MHZ(20))) { //Initialize SD card, assume power has been cycled since last time
                 logger.enableSD(false);
                 delay(100);
                 logger.enableSD(true);
                 delay(100);
-                if(!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+                if(!sd.begin(chipSelect, SD_SCK_MHZ(10))) {
                     Serial.println("SD Fail on retry"); //DEBUG!
                     throwError(SD_INIT_FAIL | 0x100);
                     // sd.initErrorHalt(); //DEBUG!??
@@ -672,7 +672,7 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
             throwError(SD_NOT_INSERTED);
             sdInit = false; //Clear flag
         }
-        else if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) { //Initialize SD card, assume power has been cycled since last time
+        else if (!sd.begin(chipSelect, SD_SCK_MHZ(20))) { //Initialize SD card, assume power has been cycled since last time
             //FIX! Throw error!
             //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
             
@@ -680,7 +680,7 @@ bool KestrelFileHandler::dumpToSD() //In case of FRAM filling up, dumps all entr
             delay(100);
             logger.enableSD(true);
             delay(100);
-            if(!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+            if(!sd.begin(chipSelect, SD_SCK_MHZ(10))) {
                 Serial.println("SD Fail on retry"); //DEBUG!
                 // sd.initErrorHalt(); //DEBUG!??
                 throwError(SD_INIT_FAIL | 0x100);
@@ -852,11 +852,12 @@ bool KestrelFileHandler::backhaulUnsentLogs()
     logger.enableSD(true);
     if(!logger.sdInserted()) {
         throwError(SD_NOT_INSERTED);
+        logger.enableSD(false); //Turn power back off before exiting 
         return false; //Return failure
     }
     else { //Don't bother trying to connect if no SD is connected 
         WITH_LOCK(SPI){
-            if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) { //Initialize SD card, assume power has been cycled since last time
+            if (!sd.begin(chipSelect, SD_SCK_MHZ(20))) { //Initialize SD card, assume power has been cycled since last time
                 //FIX! Throw error!
                 //FIX! Write error to EEPROM cause we can't seem to work with SD card or telemetry...
                 // sd.initErrorHalt(); //DEBUG!??
@@ -864,7 +865,7 @@ bool KestrelFileHandler::backhaulUnsentLogs()
                 delay(100);
                 logger.enableSD(true);
                 delay(100);
-                if(!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+                if(!sd.begin(chipSelect, SD_SCK_MHZ(10))) {
                     Serial.println("SD Fail on retry"); //DEBUG!
                     // sd.initErrorHalt(); //DEBUG!??
                     throwError(SD_INIT_FAIL | 0x100);
@@ -1069,7 +1070,11 @@ bool KestrelFileHandler::backhaulUnsentLogs()
 
 bool KestrelFileHandler::eraseFRAM()
 {
-    return fram.erase();
+    logger.enableI2C_Global(false); //Disable external I2C
+    logger.enableI2C_OB(true); //Turn on internal I2C
+    bool error = fram.erase();
+    fram.put(memSizeFRAM - sizeof(memSizeFRAM), memSizeFRAM - sizeof(memSizeFRAM)); //Put in default stack pointer
+    return error;
 }
 
 long KestrelFileHandler::getStackPointer()
@@ -1154,7 +1159,7 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
 		// output = output + "\"lvl-2\":{},";
         logger.enableSD(true); //Make sure SD is turned on
         WITH_LOCK(SPI){
-            if (!sd.begin(chipSelect, SD_SCK_MHZ(25))) {
+            if (!sd.begin(chipSelect, SD_SCK_MHZ(10))) {
                 // sd.initErrorHalt();
                 throwError(SD_INIT_FAIL);
                 logger.enableSD(false);
@@ -1234,7 +1239,12 @@ String KestrelFileHandler::selfDiagnostic(uint8_t diagnosticLevel, time_t time)
         logger.enableI2C_Global(globState); //Return to previous state
         logger.enableI2C_OB(obState);
         output = output + "\"StackPointer\":" + String(stackPointer) + ",";
-        if(stackPointer != 0) output = output + "\"FRAM_Util\":" + String((100*(memSizeFRAM - stackPointer))/memSizeFRAM) + ","; //Report percentage of FRAM used
+        if(stackPointer != 0) {
+            int framPer = (100*(memSizeFRAM - stackPointer))/memSizeFRAM;
+            output = output + "\"FRAM_Util\":" + String(framPer) + ","; //Report percentage of FRAM used
+            if(framPer >= 90) throwError(FRAM_SPACE_CRITICAL); //If less than 10% left, throw critical warning
+            else if(framPer >= 75) throwError(FRAM_SPACE_WARNING); //If less than 25% but more than 10% left, throw general warning
+        }
 		else output = output + "\"FRAM_Util\":null,";
         // output = output + "}"; //Close pair
 		
@@ -1263,6 +1273,56 @@ bool KestrelFileHandler::tryBackhaul()
     
 }
 
+int KestrelFileHandler::sleep()
+{
+    switch(powerSaveMode) {
+        case PowerSaveModes::PERFROMANCE:
+            return 0; //Nothing to do for performance mode 
+            break; 
+        case PowerSaveModes::BALANCED:
+            logger.enableSD(false); //Turn off SD power
+            break;
+        case PowerSaveModes::LOW_POWER:
+            logger.enableSD(false); //Turn off SD power
+            break;
+        case PowerSaveModes::ULTRA_LOW_POWER:
+            logger.enableSD(false); //Turn off SD power
+            //SLEEP FRAM //FIX!
+            Wire.beginTransmission(0x7C);
+            Wire.write((0x50 << 1) | 0x01); //Shift to add "r/w" bit
+            Wire.endTransmission(false);
+            Wire.beginTransmission(0x43);
+            Wire.endTransmission();
+            break;
+        default:
+            //THROW ERROR??
+            return 0; //Mimic perfromance mode if not specificed  
+            break; 
+    }
+    return 1; //DEBUG! 
+}
+
+int KestrelFileHandler::wake()
+{
+    switch(powerSaveMode) {
+        case PowerSaveModes::PERFROMANCE:
+            return 0; //Nothing to do for performance mode 
+            break; 
+        case PowerSaveModes::LOW_POWER:
+            // return 0;
+            getStackPointer(); //Get stack pointer to wake FRAM
+            break;
+        case PowerSaveModes::ULTRA_LOW_POWER:
+            getStackPointer(); //Get stack pointer to wake FRAM
+            break;
+        default:
+            //THROW ERROR??
+            return 0; //Mimic perfromance mode if not specificed  
+            break; 
+    }
+    return 1; //DEBUG!
+}
+
 void KestrelFileHandler::dateTimeSD(uint16_t* date, uint16_t* time) {
 //  DateTime now = RTC.now();
 //  sprintf(timestamp, "%02d:%02d:%02d %2d/%2d/%2d \n", now.hour(),now.minute(),now.second(),now.month(),now.day(),now.year()-2000);
@@ -1270,7 +1330,7 @@ void KestrelFileHandler::dateTimeSD(uint16_t* date, uint16_t* time) {
 //  Serial.println(timestamp);
 
 uint8_t source = selfPointer->logger.updateTime();
-if(source > TimeSource::NONE) { //Only write time back if time is legit
+if(source != TimeSource::NONE) { //Only write time back if time is legit
     Serial.print("SD Date: "); //DEBUG!
     Serial.print(selfPointer->logger.currentDateTime.year);
     Serial.print("/");

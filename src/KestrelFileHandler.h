@@ -49,6 +49,8 @@ class KestrelFileHandler: public Sensor
     const uint32_t BASE_FOLDER_MISSING = 0xF00400F4;
     const uint32_t FRAM_INIT_FAIL = 0x400300F9;
     const uint32_t FRAM_ACCESS_FAIL = 0x400400F9;
+    const uint32_t FRAM_SPACE_WARNING = 0xF0180000;
+    const uint32_t FRAM_SPACE_CRITICAL = 0xF0190000;
     const uint32_t FRAM_OVERRUN = 0xF00500F9;
     const uint32_t FRAM_INDEX_EXCEEDED = 0x800400F4;
     const uint32_t BACKLOG_PRESENT = 0xF00600F4;
@@ -57,6 +59,7 @@ class KestrelFileHandler: public Sensor
     const uint32_t OVERSIZE_PACKET = 0x900200F0; ///<Attempt to write too large of a packet to FRAM, packet ignored
     const uint32_t FILE_INDEX_OOR = 0xF00E00F9; ///<File index stored on FRAM is in some way out of the expected range
     const uint32_t SD_FILE_NOT_FOUND = 0xF00D00F4; ///<Could not find the stored file index on SD card
+    const uint32_t PACKET_LEN_EXCEEDED = 0xF0160009; ///<Max length of packet exceeded without termination breaks
     constexpr static  int MAX_NUM_ERRORS = 10; ///<Maximum number of errors to log before overwriting previous errors in buffer
     
     public:
@@ -132,6 +135,18 @@ class KestrelFileHandler: public Sensor
         * @details Returns JSON formatted blob of current error codes
         */  
         String getErrors();
+        /**
+        * @brief Puts the system into reduced power state
+        * @details Places system into variable power condition based on state of powerSaveMode
+        * @return Status of sleep attempt
+        */  
+        int sleep();
+        /**
+        * @brief Returns system to operational state
+        * @details Negates actions of sleep() call
+        * @return Status of wake attempt
+        */  
+        int wake();
 
     
         // String getMetadata();
@@ -145,7 +160,7 @@ class KestrelFileHandler: public Sensor
         // String diagnosticFilePath = ""; ///<Path describing the location of the diagnostic file on the SD card, updated each time `begin()` is run
         String filePaths[6] = {""}; ///<Paths for the location of the data files on the SD card (indicies mapped to DataType)
         const String fileShortNames[5] = {"Data","Err","Diag","Meta","Dump"};
-        const String publishTypes[5] = {"data","error","diagnostic","metadata","unsent"}; ///<Defines the values sent for particle publish names
+        const String publishTypes[5] = {"data/v2","error/v2","diagnostic/v2","metadata/v2","unsent"}; ///<Defines the values sent for particle publish names
         static constexpr int MAX_MESSAGE_LENGTH = 1024; ///<Maximum number of characters allowed for single transmission 
         //FIX! Call from particle!
         const uint16_t maxFileNum = 9999; //Max number of files allowed 
